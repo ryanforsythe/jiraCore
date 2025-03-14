@@ -1,0 +1,4 @@
+.. automodule:: XML to JSON
+   :members:
+   :show-inheritance:
+   :undoc-members:

@@ -1,0 +1,858 @@
+
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>jiraCore documentation &#8212; jiraCore 1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d75fae25" />
+    <link rel="stylesheet" type="text/css" href="_static/bizstyle.css?v=5283bb3d" />
+    <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
+    
+    <script src="_static/documentation_options.js?v=29a6c3e3"></script>
+    <script src="_static/doctools.js?v=9bcbadda"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/bizstyle.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <!--[if lt IE 9]>
+    <script src="_static/css3-mediaqueries.js"></script>
+    <![endif]-->
+  </head><body>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="#">jiraCore 1 documentation</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">jiraCore documentation</a></li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <section id="jiracore-documentation">
+<h1>jiraCore documentation<a class="headerlink" href="#jiracore-documentation" title="Link to this heading">¶</a></h1>
+<p>Add your content using <code class="docutils literal notranslate"><span class="pre">reStructuredText</span></code> syntax. See the
+<a class="reference external" href="https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html">reStructuredText</a>
+documentation for details.</p>
+<div class="toctree-wrapper compound">
+</div>
+<dl class="py class" id="module-jiraCore">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">jiraCore.</span></span><span class="sig-name descname"><span class="pre">JiraAPI</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">project_key</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Provides functionality to interact with the Jira API for various operations such as user and
+project management, issue tracking, and search functionalities.</p>
+<p>This class is designed to handle authentication, make REST API calls to Jira, and manage
+application-wide headers. The purpose is to abstract Jira’s API calls and simplify usage for
+Jira users and projects.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Variables<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>jvars</strong> – Reference to the JiraVariables instance for configuration data.</p></li>
+<li><p><strong>base_url</strong> – The base URL for Jira API requests.</p></li>
+<li><p><strong>_auth</strong> – Authentication credentials for Jira API calls.</p></li>
+<li><p><strong>default_issue_type_id</strong> – The default issue type identifier for Jira issues.</p></li>
+<li><p><strong>default_priority_id</strong> – The default priority identifier for Jira issues.</p></li>
+<li><p><strong>headers</strong> – Standard headers used for HTTP requests to the Jira API.</p></li>
+<li><p><strong>default_project_key</strong> – The default key of the Jira project being used.</p></li>
+<li><p><strong>logger</strong> – Logger instance for managing log records.</p></li>
+<li><p><strong>project_info</strong> – Details of the Jira project.</p></li>
+<li><p><strong>project_id</strong> – Identifier of the Jira project currently being worked on.</p></li>
+<li><p><strong>user_account_id</strong> – Account ID of the authenticated user.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.authenticate">
+<span class="sig-name descname"><span class="pre">authenticate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.authenticate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.authenticate" title="Link to this definition">¶</a></dt>
+<dd><p>Authenticates the user by sending a GET request to the specified API endpoint
+using the base URL and provided credentials. This method captures the response,
+logs the status and user information on successful authentication, and updates
+the <code class="docutils literal notranslate"><span class="pre">user_account_id</span></code> attribute. It handles exceptions, logs errors, and
+returns appropriate status codes on failure.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>requests.exceptions.HTTPError</strong> – If an HTTP exception occurs during the
+request.</p></li>
+<li><p><strong>Exception</strong> – For any other unexpected failures during the execution.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A tuple containing the status code (int) and an error message (str)
+on failure, or the status code (int) alone on success.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int or tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.init_logger">
+<span class="sig-name descname"><span class="pre">init_logger</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.init_logger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.init_logger" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.issue_add_attachment">
+<span class="sig-name descname"><span class="pre">issue_add_attachment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">issue_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">file_attachment</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.issue_add_attachment"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.issue_add_attachment" title="Link to this definition">¶</a></dt>
+<dd><p>Adds an attachment to a JIRA issue. This method uploads a file attachment to the specified
+JIRA issue using the JIRA REST API. The file is identified by its path, and JIRA-specific
+headers are configured to handle the attachment upload correctly.</p>
+<p>This method attempts to post the given file as an attachment to the JIRA issue identified
+by its ID. The file’s application type is determined internally using a helper function.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>issue_id</strong> (<em>str</em>) – The unique identifier of the issue to which the attachment will be added.</p></li>
+<li><p><strong>file_attachment</strong> (<em>str</em>) – The path to the file that needs to be attached.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The HTTP status code of the response for successful upload, negative values for errors.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.issue_add_comment">
+<span class="sig-name descname"><span class="pre">issue_add_comment</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">issue_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">comment</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.issue_add_comment"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.issue_add_comment" title="Link to this definition">¶</a></dt>
+<dd><p>Adds a comment to a specified issue in the issue tracking system.</p>
+<p>This method sends a POST request to the specified issue endpoint with the
+given comment payload. The content of the comment is added to the issue
+identified by the <cite>issue_id</cite>. The method verifies the response, logs the success
+or failure event, and returns the status code based on the operation outcome.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>issue_id</strong> – The identifier of the issue to which the comment will be added
+(str).</p></li>
+<li><p><strong>comment</strong> – The text of the comment to be added to the issue (str).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The HTTP response status code of the action. Returns -33.1 in case of
+an HTTP error and -33 in case of a general exception (int).</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.issue_assign">
+<span class="sig-name descname"><span class="pre">issue_assign</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">issue_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">accountId</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.issue_assign"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.issue_assign" title="Link to this definition">¶</a></dt>
+<dd><p>Assigns an issue to a specified user in the system using the provided issue ID and account ID.
+This method sends a PUT request to the respective API endpoint to assign the issue. It logs
+the outcome and returns the HTTP status code or a specific error code in case of a failure.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>issue_id</strong> (<em>str</em>) – The unique identifier of the issue to be assigned.</p></li>
+<li><p><strong>accountId</strong> (<em>str</em>) – The account ID of the user to whom the issue will be assigned.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>HTTP status code if assignment is successful, -34 for a general error, or -34.1
+for HTTP request-related errors.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.issue_changelog">
+<span class="sig-name descname"><span class="pre">issue_changelog</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">issue_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_results</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1000</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">object</span></span></span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.issue_changelog"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.issue_changelog" title="Link to this definition">¶</a></dt>
+<dd><p>Fetches the changelog entries for a specific issue from the Jira API. The method sends
+a GET request to the Jira API endpoint for issue changelogs, using the provided issue ID
+and an optional maximum result limit. Returns a dictionary that contains the HTTP status
+code, retrieved changelog entries, or details about any exception encountered during the request.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>issue_id</strong> (<em>str</em>) – The identifier of the issue whose changelog is to be retrieved.</p></li>
+<li><p><strong>max_results</strong> (<em>int</em><em>, </em><em>optional</em>) – The maximum number of changelog entries to retrieve. Defaults to 1000.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><p>A dictionary containing:
+- status_code (float): The HTTP status code of the response or a custom error code</p>
+<blockquote>
+<div><p>if an exception occurs.</p>
+</div></blockquote>
+<ul class="simple">
+<li><p>changelog_entries (object): The JSON parsed changelog entries retrieved from the
+API, or None if an error occurs.</p></li>
+<li><p>status_exception_comment (str): A message describing any exception encountered,
+or None if the request is successful.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.issue_create">
+<span class="sig-name descname"><span class="pre">issue_create</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">summary</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project_id</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">issue_type_id</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">description</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">assignee</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">priority</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.issue_create"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.issue_create" title="Link to this definition">¶</a></dt>
+<dd><p>Create a Jira issue.</p>
+<p>This function interacts with the Jira API to create an issue in a specified project.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>project_id</strong> (<em>str</em>) – The ID of the project where the issue will be created.</p></li>
+<li><p><strong>summary</strong> (<em>str</em>) – The summary (short description) of the issue.</p></li>
+<li><p><strong>issue_type_id</strong> (<em>int</em><em>, </em><em>optional</em>) – The type of issue to create (default: 12412).</p></li>
+<li><p><strong>description</strong> (<em>str</em><em>, </em><em>optional</em>) – A longer description of the issue, optional.</p></li>
+<li><p><strong>assignee</strong> (<em>str</em><em>, </em><em>optional</em>) – The account ID of the person to assign the issue to, optional.</p></li>
+<li><p><strong>priority</strong> (<em>int</em><em>, </em><em>optional</em>) – The priority of the issue (default: 10100), optional.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A namedtuple representing the created issue with the fields:
+- <cite>status_code</cite> (int): The HTTP status code of the response.
+- <cite>issue_info</cite> (dict): Additional information about the created issue.
+- <cite>id</cite> (str): The ID of the newly created issue.
+- <cite>key</cite> (str): The Jira key of the created issue (e.g., “PROJECT-123”).
+- <cite>issue_url</cite> (str): The URL of the created issue in Jira.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>namedtuple(“issue”, [“status_code”, “issue_info”, “id”, “key”, “issue_url”])</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.issue_detail">
+<span class="sig-name descname"><span class="pre">issue_detail</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">issue_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_forms</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.issue_detail"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.issue_detail" title="Link to this definition">¶</a></dt>
+<dd><p>Retrieves the details of a Jira issue, including various metadata and optionally form responses. It fetches
+issue details such as reporter information, assignee information, status, and custom fields. If
+<cite>include_forms</cite> is set to <cite>True</cite>, it extracts additional data from Proforma forms present in the issue and
+merges questions and responses into a pandas DataFrame.</p>
+<p>This method makes an authenticated HTTP request to the Jira API to retrieve the specified issue’s details.
+It processes the response to parse issue metadata and optional form-related data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>issue_id</strong> – The unique identifier of the Jira issue</p></li>
+<li><p><strong>include_forms</strong> – If set to True, retrieves and processes forms associated with the issue.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A named tuple containing the following elements:
+- <cite>status_code</cite> (int): The HTTP status code of the request.
+- <cite>jira_issue_info_dict</cite> (dict): Metadata and details about the Jira issue.
+- <cite>jira_issue_dict</cite> (dict): Raw API response data from Jira.
+- <cite>question_response_df</cite> (pandas.DataFrame): A DataFrame containing Proforma form responses, if <cite>include_forms</cite> is True.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>namedtuple</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p>Handles HTTP error or generic exceptions during API requests or data processing.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.issue_field_update">
+<span class="sig-name descname"><span class="pre">issue_field_update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">issue_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">field_update_dict</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.issue_field_update"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.issue_field_update" title="Link to this definition">¶</a></dt>
+<dd><p>Updates the fields of a specific issue in the issue tracking system by sending
+a PUT request to the API endpoint. This method allows updating multiple fields
+at once by providing a dictionary of field names and their corresponding new
+values.</p>
+<p>If the update operation is successful, it logs the changes and returns the
+HTTP response status code. In case of an HTTP error or other exceptions, it logs
+the appropriate error details and returns specific negative status codes to
+indicate failure.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>issue_id</strong> (<em>str</em>) – The unique identifier of the issue to be updated.</p></li>
+<li><p><strong>field_update_dict</strong> (<em>dict</em>) – Dictionary containing the fields to update
+and their new values. The keys in the dictionary represent the field
+names, and the values represent the new data for those fields.
+Example: field_update_data = {“customfield_14064”: [{“accountId”: “712020:d4f13f91-ed7f-493d-8fef-4029b44eb7cb”},{“accountId”: “5a4e734573cadb08a03ed16c”}]}</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The HTTP status code of the update request if successful, or a
+specific negative status code indicating an error (-35 for general
+exceptions, -35.1 for HTTP errors).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.issue_statuses">
+<span class="sig-name descname"><span class="pre">issue_statuses</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">projectLevel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_dataframe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">object</span></span></span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.issue_statuses"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.issue_statuses" title="Link to this definition">¶</a></dt>
+<dd><p>Retrieves issue statuses for a project or globally based on the project-level flag.</p>
+<p>The method retrieves issue statuses data by making an HTTP GET request to the
+appropriate endpoint. If the <cite>projectLevel</cite> parameter is set to True, the request
+is scoped to the specific project, otherwise it retrieves the global issue statuses.
+The returned data can be optionally converted into a pandas DataFrame if the
+<cite>as_dataframe</cite> parameter is set to True. The result, including the HTTP status
+code and issue statuses data, is encapsulated in a named tuple <cite>IssueStatuses</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>projectLevel</strong> – A boolean indicating if the request should be scoped to the
+specific project (True) or retrieve global issue statuses (False).</p></li>
+<li><p><strong>as_dataframe</strong> – A boolean indicating if the issue statuses data should be
+returned as a pandas DataFrame (True) or as a dictionary (False).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A named tuple <cite>IssueStatuses</cite>:
+-status_code
+-issue_statuses: either as a dictionary or a pandas DataFrame.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>namedtuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.issue_transition">
+<span class="sig-name descname"><span class="pre">issue_transition</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">issue_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transition_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.issue_transition"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.issue_transition" title="Link to this definition">¶</a></dt>
+<dd><p>Transitions a specified issue in a project management system to a new state using
+a provided transition ID. This involves making a POST request to the system’s API
+while handling potential exceptions and logging outcomes.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>issue_id</strong> (<em>str</em>) – Identifier for the issue to be transitioned.</p></li>
+<li><p><strong>transition_id</strong> (<em>str</em>) – Identifier for the transition to apply to the issue.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Status code of the API response, or custom error status codes for
+exceptional conditions (-37 or -37.1).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.issue_types_user">
+<span class="sig-name descname"><span class="pre">issue_types_user</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">as_dataframe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">object</span></span></span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.issue_types_user"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.issue_types_user" title="Link to this definition">¶</a></dt>
+<dd><p>Retrieves the issue types available for the user from the API and returns them
+in the specified format. The retrieval is done via a GET request to the
+designated endpoint. The result can be returned either as a raw dictionary or
+formatted as a DataFrame. Any errors during the process are handled and logged,
+with status codes indicating success or failure.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>as_dataframe</strong> (<em>bool</em>) – Determines whether the response will be converted into
+a pandas DataFrame or returned as a dictionary. Defaults to False.
+If True, the response will be formatted as a pandas DataFrame. If False,
+a raw dictionary is returned.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A named tuple containing the status code and the retrieved issue types.
+If an error occurs during the retrieval process, the status code in the
+returned tuple will indicate the nature of the error, and the issue types
+part of the tuple will be empty.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>namedtuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.project_info">
+<span class="sig-name descname"><span class="pre">project_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">project_key</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.project_info"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.project_info" title="Link to this definition">¶</a></dt>
+<dd><p>Retrieves project information from a given project key by calling a REST API endpoint.
+It processes the response to extract necessary project details, such as project ID,
+logs critical debug and error information, and handles exceptions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>project_key</strong> (<em>str</em>) – Unique identifier of the project for which information is being retrieved.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The status code of the HTTP request. For exceptions, it returns a custom negative
+status code.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int or tuple(int, str)</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>requests.exceptions.HTTPError</strong> – Raised when the HTTP request fails due to a
+non-success status code.</p></li>
+<li><p><strong>Exception</strong> – Raised for all other unexpected errors during the request or processing.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.response_type_col_ref">
+<span class="sig-name descname"><span class="pre">response_type_col_ref</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">response_type</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.response_type_col_ref"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.response_type_col_ref" title="Link to this definition">¶</a></dt>
+<dd><p>Maps a given response type to its corresponding column reference name.</p>
+<p>This function takes in a response type key (as a string) and returns the
+mapped column reference name corresponding to the type. The mapping is
+defined internally within the function through a dictionary. If the
+provided response type is not found in the dictionary, the function
+returns <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>response_type</strong> – A string representing the type of response to be
+mapped to a column name.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The column name corresponding to the given response type. If
+the response type is not found, returns <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str or None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.response_type_ref">
+<span class="sig-name descname"><span class="pre">response_type_ref</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">response_type</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.response_type_ref"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.response_type_ref" title="Link to this definition">¶</a></dt>
+<dd><p>Maps a response type code to its corresponding human-readable name.</p>
+<p>This function takes a response type code and returns the corresponding
+string representation of the human-readable name. It uses a predefined
+mapping to perform this transformation. If the provided response type
+does not exist in the mapping, it returns <cite>None</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>response_type</strong> (<em>str</em>) – The code representing the type of response to be mapped.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The human-readable name associated with the response type code,
+or <cite>None</cite> if the code is not found.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.role_add_user">
+<span class="sig-name descname"><span class="pre">role_add_user</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">role_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">accountId</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project_id</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.role_add_user"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.role_add_user" title="Link to this definition">¶</a></dt>
+<dd><p>Add a user to a specified role for a given project in the system. This method sends a POST
+request to the appropriate API endpoint with the required payload. The method will log
+relevant information and errors during the execution, returning the HTTP response status
+code or an error-specific code in case of failure.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>role_id</strong> (<em>int</em>) – The ID of the role to which the user will be added.</p></li>
+<li><p><strong>accountId</strong> (<em>str</em>) – The ID of the user account to be added to the role.</p></li>
+<li><p><strong>project_id</strong> (<em>Optional</em><em>[</em><em>int</em><em>]</em>) – The ID of the project associated with the role. Defaults to the object’s
+<cite>project_id</cite> if not specified.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The HTTP status code resulting from the API call. In case of errors, returns -51 for
+general exceptions or -51.1 for HTTP errors.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.role_get_users">
+<span class="sig-name descname"><span class="pre">role_get_users</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">role_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project_id</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">object</span></span></span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.role_get_users"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.role_get_users" title="Link to this definition">¶</a></dt>
+<dd><p>Retrieve the users associated with a specified Jira role for a given project.</p>
+<p>This method interacts with the Jira API to fetch details of users assigned to a specific
+role within a project. The fetched data includes detailed information about the
+users’ accounts and builds a DataFrame to organize the data. If the project ID
+is not explicitly provided, the method defaults to the project’s ID already
+associated with the instance of the object.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>role_id</strong> (<em>str</em>) – The unique identifier of the Jira role.</p></li>
+<li><p><strong>project_id</strong> (<em>str</em><em>, </em><em>optional</em>) – The unique identifier of the project, defaults to the instance’s project ID.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><p>A named tuple containing:
+- status_code (int): The HTTP status code of the Jira API request.
+- jiraRole_users_df (pandas.DataFrame): A DataFrame containing user details</p>
+<blockquote>
+<div><p>associated with the role in the project.</p>
+</div></blockquote>
+<ul class="simple">
+<li><p>jiraRole_dict (dict): Raw dictionary data retrieved from the Jira API for the role.</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>object</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.role_info">
+<span class="sig-name descname"><span class="pre">role_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">role_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">project_id</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">object</span></span></span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.role_info"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.role_info" title="Link to this definition">¶</a></dt>
+<dd><p>Retrieves information about a specific Jira role in a given project. This includes details about
+role members and associated metadata fetched from the Jira API. The information returned is
+organized as a namedtuple containing the HTTP status code and a pandas DataFrame of role members.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>role_id</strong> (<em>int</em>) – The unique identifier of the Jira role.</p></li>
+<li><p><strong>project_id</strong> (<em>Optional</em><em>[</em><em>int</em><em>]</em>) – The unique identifier of the Jira project. If not provided, it defaults to None.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Named tuple:
+-status_code: the HTTP status code
+-jira_role_members_df: a pandas DataFrame with Jira role members.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>namedtuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.search_issues">
+<span class="sig-name descname"><span class="pre">search_issues</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">search_query</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_dataframe</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.search_issues"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.search_issues" title="Link to this definition">¶</a></dt>
+<dd><p>Executes a search query against the Jira API to retrieve issues based on the provided JQL.</p>
+<p>The function returns the issues either in raw format or as a DataFrame based on the input flag.
+HTTP errors and general exceptions are handled, with relevant error messages logged.
+The returned data is encapsulated into a named tuple containing the response details.</p>
+<dl>
+<dt>Parameters:</dt><dd><p>search_query (str): The JQL (Jira Query Language) expression used to retrieve issues from Jira.
+as_dataframe (bool): A flag indicating whether the response should be returned as a pandas DataFrame.</p>
+<blockquote>
+<div><p>Defaults to False.</p>
+</div></blockquote>
+</dd>
+<dt>Returns:</dt><dd><dl class="simple">
+<dt>collections.namedtuple: A named tuple containing the following elements:</dt><dd><ul class="simple">
+<li><p><cite>status_code</cite> (int): The HTTP status code of the API response.</p></li>
+<li><p><cite>jira_issues</cite> (list | pandas.DataFrame): The retrieved issues, returned as raw JSON (list) or
+as a pandas DataFrame depending on the value of <cite>as_dataframe</cite>.</p></li>
+</ul>
+</dd>
+</dl>
+</dd>
+<dt>Raises:</dt><dd><p>requests.exceptions.HTTPError: If the API request fails with an HTTP error.
+Exception: For general unexpected errors.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.user_by_email">
+<span class="sig-name descname"><span class="pre">user_by_email</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">email_address</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.user_by_email"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.user_by_email" title="Link to this definition">¶</a></dt>
+<dd><p>Retrieves user information based on the given email address by querying the Jira API. The system will validate
+the email address format before sending the data request. If the email address format is invalid, the method
+immediately logs the error and returns a structured tuple with a specific error code. If the request to the
+API is successful, the method returns the first user matching the provided email address. Logging is utilized
+throughout the process to provide detailed runtime diagnostics.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>email_address</strong> (<em>str</em>) – An email address string to query the Jira API for user information.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A named tuple containing:
+-status_code
+-jira_user_dict: a dictionary of user information (or an empty dictionary if not found)
+-jira_user_found: flag indicating if the user was found (1 for found, 0 for not found, -1 for errors).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraCore.JiraAPI.user_info">
+<span class="sig-name descname"><span class="pre">user_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">account_id</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/jiraCore.html#JiraAPI.user_info"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.JiraAPI.user_info" title="Link to this definition">¶</a></dt>
+<dd><p>Retrieve information about a user from Jira using their account ID.</p>
+<p>This method interacts with the Jira REST API to fetch user information based on the provided
+account ID. It returns a named tuple containing the response status code, user data, whether
+or not the user was found, user email address, display name, and activity status. If the
+specified user is not found or an error occurs during the API request, appropriate responses
+are logged and returned to the caller.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>account_id</strong> (<em>str</em>) – The Jira account ID of the user whose details are to be fetched.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><p>On success, a named tuple containing:
+- status_code (int): HTTP response code from the Jira API.
+- jira_user_dict (dict): Dictionary containing user information.
+- jira_user_found (int): Indicator whether the user was found (1 if found, 0 otherwise).
+- jira_user_email (str): Email address of the user.
+- jira_user_display_name (str): Display name of the user.
+- jira_user_active (bool): Active status of the user.
+On failure, varies as:
+- For HTTP request errors, returns a tuple (status_code: float, error_message: str).
+- For other exceptions, returns the named tuple with status_code -17 and appropriate default</p>
+<blockquote>
+<div><p>values.</p>
+</div></blockquote>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Union[namedtuple, Tuple[float, str]]</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>requests.exceptions.HTTPError</strong> – If the HTTP request to Jira fails due to response errors.</p></li>
+<li><p><strong>Exception</strong> – If any other exception occurs during the execution.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="jiraCore.dict_as_key_value">
+<span class="sig-prename descclassname"><span class="pre">jiraCore.</span></span><span class="sig-name descname"><span class="pre">dict_as_key_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_as_variable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">as_json</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/jiraCore.html#dict_as_key_value"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.dict_as_key_value" title="Link to this definition">¶</a></dt>
+<dd><p>Converts a list of dictionaries into a key-value pair dictionary, where keys are formatted
+based on the attribute <cite>name</cite> and values are derived from <cite>id</cite>. Provides the option to
+format keys as valid variables and to return the dictionary as a JSON-formatted string.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_dict</strong> (<em>list</em><em>[</em><em>dict</em><em>]</em>) – A list of dictionaries where each dictionary must include the attributes
+<cite>name</cite> and <cite>id</cite>. Each dictionary in the list is converted and aggregated into the resulting
+key-value pair dictionary.</p></li>
+<li><p><strong>key_as_variable</strong> (<em>bool</em><em>, </em><em>optional</em>) – A boolean flag indicating whether the keys should be formatted
+as valid variable names. If set to True, the keys will be formatted as lowercase with
+spaces replaced by underscores.</p></li>
+<li><p><strong>as_json</strong> (<em>bool</em><em>, </em><em>optional</em>) – A boolean flag indicating whether to return the resulting dictionary
+as a JSON-formatted string or as a Python dictionary.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The resultant dictionary containing key-value pairs derived from the input list of
+dictionaries, formatted as requested. If <cite>as_json</cite> is True, the result is returned as a
+JSON-formatted string.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Union[dict, str]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="jiraCore.get_file_application_type">
+<span class="sig-prename descclassname"><span class="pre">jiraCore.</span></span><span class="sig-name descname"><span class="pre">get_file_application_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file_attachment</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">str</span></span></span><a class="reference internal" href="_modules/jiraCore.html#get_file_application_type"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraCore.get_file_application_type" title="Link to this definition">¶</a></dt>
+<dd><p>Determine the MIME type (application type) of a file attachment based on its extension.</p>
+<p>This function evaluates the file extension to correctly classify its application type.
+If the file extension is <cite>.mmp</cite>, it is categorized as <cite>application/octet-stream</cite>.
+For other extensions, the function attempts to deduce the MIME type using the
+<cite>mimetypes.guess_type</cite> library. If no type is found, it defaults to <cite>text/plain</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>file_attachment</strong> (<em>str</em>) – The file name or path representing the file attachment whose MIME
+type needs to be determined.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The MIME type of the given file attachment.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class" id="module-jiraVariables">
+<dt class="sig sig-object py" id="jiraVariables.JiraVariables">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">jiraVariables.</span></span><span class="sig-name descname"><span class="pre">JiraVariables</span></span><a class="reference internal" href="_modules/jiraVariables.html#JiraVariables"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraVariables.JiraVariables" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Class handling JIRA variables and configurations.</p>
+<p>This class manages JIRA-related variables and configurations, such as roles,
+statuses, transitions, components, priorities, issue types, and credentials.
+It loads these configurations from environment variables or keyring services
+to facilitate interaction with the JIRA API. Dictionaries are initialized to
+map human-readable identifiers to their corresponding JIRA IDs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Variables<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>base_jira_url</strong> – Base API URL of the JIRA instance loaded from the
+environment variables.</p></li>
+<li><p><strong>log_location</strong> – Path for logging output as specified in the
+environment variables.</p></li>
+<li><p><strong>log_level</strong> – Log verbosity level fetched from environment variables.</p></li>
+<li><p><strong>jira_user_name</strong> – JIRA username fetched from a keyring service.</p></li>
+<li><p><strong>_jira_password</strong> – JIRA password fetched securely from a keyring service.</p></li>
+<li><p><strong>default_issue_type_id</strong> – ID of the default issue type derived from the
+environment variables and initialized dictionary.</p></li>
+<li><p><strong>default_priority_id</strong> – ID of the default priority derived from the
+environment variables and initialized dictionary.</p></li>
+<li><p><strong>default_project_key</strong> – Key of the default project loaded from the
+environment variables.</p></li>
+<li><p><strong>jira_role_dict</strong> – Dictionary mapping user roles to their corresponding
+JIRA IDs.</p></li>
+<li><p><strong>jira_status_dict</strong> – Dictionary mapping issue statuses to their
+corresponding JIRA IDs.</p></li>
+<li><p><strong>jira_transition_dict</strong> – Dictionary mapping issue transitions to their
+corresponding JIRA IDs.</p></li>
+<li><p><strong>jira_components_dict</strong> – Dictionary mapping JIRA components to their
+corresponding IDs.</p></li>
+<li><p><strong>jira_priority_dict</strong> – Dictionary mapping priority levels to their
+corresponding JIRA IDs.</p></li>
+<li><p><strong>jira_issue_type_dict</strong> – Dictionary mapping issue types to their
+corresponding JIRA IDs.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraVariables.JiraVariables.init_dicts">
+<span class="sig-name descname"><span class="pre">init_dicts</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/jiraVariables.html#JiraVariables.init_dicts"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraVariables.JiraVariables.init_dicts" title="Link to this definition">¶</a></dt>
+<dd><p>”
+Initialize dictionaries for role, status, transition, components, and priority.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="jiraVariables.JiraVariables.jira_dict_lookup">
+<span class="sig-name descname"><span class="pre">jira_dict_lookup</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dict_type</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">int</span></span></span><a class="reference internal" href="_modules/jiraVariables.html#JiraVariables.jira_dict_lookup"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#jiraVariables.JiraVariables.jira_dict_lookup" title="Link to this definition">¶</a></dt>
+<dd><p>Looks up a value in a dictionary corresponding to the specified type
+and key. This method supports lookup for various predefined types
+related to JIRA (e.g., roles, statuses, transitions, components,
+priorities, and issue types). The lookup is performed in a
+case-insensitive manner for the provided key.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dict_type</strong> (<em>str</em>) – The type of dictionary to search. Possible values are
+“role”, “status”, “transition”, “components”,
+“priority”, and “issue_type”.</p></li>
+<li><p><strong>key</strong> (<em>str</em>) – The key to look up in the specified dictionary. The key
+will be normalized to lowercase for the lookup.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The integer value associated with the key in the specified
+dictionary, or None if the key is not found or the
+dictionary type is invalid.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int | None</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+            <div class="clearer"></div>
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="#">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">jiraCore documentation</a><ul>
+<li><a class="reference internal" href="#jiraCore.JiraAPI"><code class="docutils literal notranslate"><span class="pre">JiraAPI</span></code></a><ul>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.authenticate"><code class="docutils literal notranslate"><span class="pre">JiraAPI.authenticate()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.init_logger"><code class="docutils literal notranslate"><span class="pre">JiraAPI.init_logger()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.issue_add_attachment"><code class="docutils literal notranslate"><span class="pre">JiraAPI.issue_add_attachment()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.issue_add_comment"><code class="docutils literal notranslate"><span class="pre">JiraAPI.issue_add_comment()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.issue_assign"><code class="docutils literal notranslate"><span class="pre">JiraAPI.issue_assign()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.issue_changelog"><code class="docutils literal notranslate"><span class="pre">JiraAPI.issue_changelog()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.issue_create"><code class="docutils literal notranslate"><span class="pre">JiraAPI.issue_create()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.issue_detail"><code class="docutils literal notranslate"><span class="pre">JiraAPI.issue_detail()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.issue_field_update"><code class="docutils literal notranslate"><span class="pre">JiraAPI.issue_field_update()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.issue_statuses"><code class="docutils literal notranslate"><span class="pre">JiraAPI.issue_statuses()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.issue_transition"><code class="docutils literal notranslate"><span class="pre">JiraAPI.issue_transition()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.issue_types_user"><code class="docutils literal notranslate"><span class="pre">JiraAPI.issue_types_user()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.project_info"><code class="docutils literal notranslate"><span class="pre">JiraAPI.project_info()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.response_type_col_ref"><code class="docutils literal notranslate"><span class="pre">JiraAPI.response_type_col_ref()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.response_type_ref"><code class="docutils literal notranslate"><span class="pre">JiraAPI.response_type_ref()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.role_add_user"><code class="docutils literal notranslate"><span class="pre">JiraAPI.role_add_user()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.role_get_users"><code class="docutils literal notranslate"><span class="pre">JiraAPI.role_get_users()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.role_info"><code class="docutils literal notranslate"><span class="pre">JiraAPI.role_info()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.search_issues"><code class="docutils literal notranslate"><span class="pre">JiraAPI.search_issues()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.user_by_email"><code class="docutils literal notranslate"><span class="pre">JiraAPI.user_by_email()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.JiraAPI.user_info"><code class="docutils literal notranslate"><span class="pre">JiraAPI.user_info()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#jiraCore.dict_as_key_value"><code class="docutils literal notranslate"><span class="pre">dict_as_key_value()</span></code></a></li>
+<li><a class="reference internal" href="#jiraCore.get_file_application_type"><code class="docutils literal notranslate"><span class="pre">get_file_application_type()</span></code></a></li>
+<li><a class="reference internal" href="#jiraVariables.JiraVariables"><code class="docutils literal notranslate"><span class="pre">JiraVariables</span></code></a><ul>
+<li><a class="reference internal" href="#jiraVariables.JiraVariables.init_dicts"><code class="docutils literal notranslate"><span class="pre">JiraVariables.init_dicts()</span></code></a></li>
+<li><a class="reference internal" href="#jiraVariables.JiraVariables.jira_dict_lookup"><code class="docutils literal notranslate"><span class="pre">JiraVariables.jira_dict_lookup()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/index.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="#">jiraCore 1 documentation</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">jiraCore documentation</a></li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+    &#169; Copyright 2025, Ryan Forsythe.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    </div>
+  </body>
+</html>
