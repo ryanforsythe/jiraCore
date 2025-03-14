@@ -1,4 +1,0 @@
-.. automodule:: file_create_scripts_from_excel_file_list
-   :members:
-   :show-inheritance:
-   :undoc-members:

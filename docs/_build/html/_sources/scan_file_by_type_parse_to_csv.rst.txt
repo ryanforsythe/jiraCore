@@ -1,4 +1,0 @@
-.. automodule:: scan_file_by_type_parse_to_csv
-   :members:
-   :show-inheritance:
-   :undoc-members:
