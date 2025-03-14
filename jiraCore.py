@@ -15,31 +15,35 @@ import jiraVariables as jvars
 
 class JiraAPI:
     """
-    Handles interactions with the Jira API for project, issue, and user management.
+    Provides functionality to interact with the Jira API for various operations such as user and
+    project management, issue tracking, and search functionalities.
 
-    This class provides methods to authenticate, manage projects, users, and issues in
-    Jira by leveraging the Jira REST API. It includes functionality for project retrieval,
-    issue creation, user information queries, and search operations.
+    This class is designed to handle authentication, make REST API calls to Jira, and manage
+    application-wide headers. The purpose is to abstract Jira's API calls and simplify usage for
+    Jira users and projects.
 
-    :ivar jvars: Instance of JiraVariables providing default configurations.
+    :ivar jvars: Reference to the JiraVariables instance for configuration data.
     :type jvars: JiraVariables
-    :ivar base_url: The base URL of the Jira instance used in requests.
+    :ivar base_url: The base URL for Jira API requests.
     :type base_url: str
-    :ivar headers: HTTP headers used for API requests, including content type and
-        additional authentication headers when authenticated.
-    :type headers: dict
-    :ivar default_issue_type_id: Default type ID for creating Jira issues.
-    :type default_issue_type_id: str
-    :ivar default_priority_id: Default priority ID for creating Jira issues.
-    :type default_priority_id: str
-    :ivar default_project_key: The project key used if no specific key is provided.
-    :type default_project_key: str
-    :ivar _auth: Holds the authentication object using basic authentication.
+    :ivar _auth: Authentication credentials for Jira API calls.
     :type _auth: HTTPBasicAuth
-    :ivar project_info: Stores metadata of the Jira project after retrieval.
+    :ivar default_issue_type_id: The default issue type identifier for Jira issues.
+    :type default_issue_type_id: str
+    :ivar default_priority_id: The default priority identifier for Jira issues.
+    :type default_priority_id: str
+    :ivar headers: Standard headers used for HTTP requests to the Jira API.
+    :type headers: dict
+    :ivar default_project_key: The default key of the Jira project being used.
+    :type default_project_key: str
+    :ivar logger: Logger instance for managing log records.
+    :type logger: Logger
+    :ivar project_info: Details of the Jira project.
     :type project_info: dict
-    :ivar project_id: ID of the currently targeted Jira project.
+    :ivar project_id: Identifier of the Jira project currently being worked on.
     :type project_id: str
+    :ivar user_account_id: Account ID of the authenticated user.
+    :type user_account_id: str
     """
     def __init__(self, project_key=None):
         """
@@ -79,14 +83,30 @@ class JiraAPI:
 
     def _set_authenticated_headers(self):
         """
-        Update headers with additional authentication information.
+        Sets headers to authenticate the request using an experimental API.
+
+        This private method is used internally to add authentication headers specific
+        to the experimental API, enabling proper communication with the server.
+
+        :return: None
         """
         self.headers["X-ExperimentalAPI"] = "opt-in"
 
     def authenticate(self):
         """
-        Authenticate the user by making a test API call.
-        :return: Tuple containing the status code and headers with authentication info
+        Authenticates the user by sending a GET request to the specified API endpoint
+        using the base URL and provided credentials. This method captures the response,
+        logs the status and user information on successful authentication, and updates
+        the ``user_account_id`` attribute. It handles exceptions, logs errors, and
+        returns appropriate status codes on failure.
+
+        :raises requests.exceptions.HTTPError: If an HTTP exception occurs during the
+            request.
+        :raises Exception: For any other unexpected failures during the execution.
+
+        :return: A tuple containing the status code (int) and an error message (str)
+            on failure, or the status code (int) alone on success.
+        :rtype: int or tuple
         """
         url = f'{self.base_url}api/3/myself'
         try:
@@ -107,9 +127,18 @@ class JiraAPI:
         
     def project_info(self, project_key):
         """
-        Retrieve details for a Jira project.
-        :param project_key: Project key
-        :return: Project information
+        Retrieves project information from a given project key by calling a REST API endpoint.
+        It processes the response to extract necessary project details, such as project ID,
+        logs critical debug and error information, and handles exceptions.
+
+        :param project_key: Unique identifier of the project for which information is being retrieved.
+        :type project_key: str
+        :return: The status code of the HTTP request. For exceptions, it returns a custom negative
+            status code.
+        :rtype: int or tuple(int, str)
+        :raises requests.exceptions.HTTPError: Raised when the HTTP request fails due to a
+            non-success status code.
+        :raises Exception: Raised for all other unexpected errors during the request or processing.
         """
         url = f'{self.base_url}api/3/project/{project_key}'
         try:
@@ -131,9 +160,32 @@ class JiraAPI:
 
     def user_info(self, account_id):
         """
-        Get information related to a user.
-        :param account_id: Jira account ID
-        :return: Named tuple with user info
+        Retrieve information about a user from Jira using their account ID.
+
+        This method interacts with the Jira REST API to fetch user information based on the provided
+        account ID. It returns a named tuple containing the response status code, user data, whether
+        or not the user was found, user email address, display name, and activity status. If the
+        specified user is not found or an error occurs during the API request, appropriate responses
+        are logged and returned to the caller.
+
+        :param account_id: The Jira account ID of the user whose details are to be fetched.
+        :type account_id: str
+
+        :returns: On success, a named tuple containing:
+                  - status_code (int): HTTP response code from the Jira API.
+                  - jira_user_dict (dict): Dictionary containing user information.
+                  - jira_user_found (int): Indicator whether the user was found (1 if found, 0 otherwise).
+                  - jira_user_email (str): Email address of the user.
+                  - jira_user_display_name (str): Display name of the user.
+                  - jira_user_active (bool): Active status of the user.
+                  On failure, varies as:
+                  - For HTTP request errors, returns a tuple (status_code: float, error_message: str).
+                  - For other exceptions, returns the named tuple with status_code -17 and appropriate default
+                    values.
+        :rtype: Union[namedtuple, Tuple[float, str]]
+
+        :raises requests.exceptions.HTTPError: If the HTTP request to Jira fails due to response errors.
+        :raises Exception: If any other exception occurs during the execution.
         """
         user_info = namedtuple("user_info", ["status_code", "jira_user_dict", "jira_user_found", "jira_user_email",
                                              "jira_user_display_name", "jira_user_active"])
@@ -163,9 +215,19 @@ class JiraAPI:
 
     def user_by_email(self, email_address):
         """
-        Get information related to a user by passing the email address.
-        :param email_address: Jira email address. Example: <EMAIL>
-        :return: Namedtuple user_info(status_code, jira_user_dict, jira_user_found)
+        Retrieves user information based on the given email address by querying the Jira API. The system will validate
+        the email address format before sending the data request. If the email address format is invalid, the method
+        immediately logs the error and returns a structured tuple with a specific error code. If the request to the
+        API is successful, the method returns the first user matching the provided email address. Logging is utilized
+        throughout the process to provide detailed runtime diagnostics.
+
+        :param email_address: An email address string to query the Jira API for user information.
+        :type email_address: str
+        :return: A named tuple containing:
+            -status_code
+            -jira_user_dict: a dictionary of user information (or an empty dictionary if not found)
+            -jira_user_found: flag indicating if the user was found (1 for found, 0 for not found, -1 for errors).
+        :rtype: tuple
         """
         user_info = namedtuple("user_info", ["status_code", "jira_user_dict", "jira_user_found"])
 
@@ -203,11 +265,28 @@ class JiraAPI:
 
     def search_issues(self, search_query, as_dataframe=False):
         """
-        Search Jira issues based on a query.
-        :param search_query: Jira search query (JQL)
-        :param as_dataframe: Return result as pandas DataFrame if True
-        :return: namedtuple("issue_search_results", ["status_code", "jira_issues"])
+        Executes a search query against the Jira API to retrieve issues based on the provided JQL.
+
+        The function returns the issues either in raw format or as a DataFrame based on the input flag.
+        HTTP errors and general exceptions are handled, with relevant error messages logged.
+        The returned data is encapsulated into a named tuple containing the response details.
+
+        Parameters:
+            search_query (str): The JQL (Jira Query Language) expression used to retrieve issues from Jira.
+            as_dataframe (bool): A flag indicating whether the response should be returned as a pandas DataFrame.
+                Defaults to False.
+
+        Returns:
+            collections.namedtuple: A named tuple containing the following elements:
+                - `status_code` (int): The HTTP status code of the API response.
+                - `jira_issues` (list | pandas.DataFrame): The retrieved issues, returned as raw JSON (list) or
+                  as a pandas DataFrame depending on the value of `as_dataframe`.
+
+        Raises:
+            requests.exceptions.HTTPError: If the API request fails with an HTTP error.
+            Exception: For general unexpected errors.
         """
+
         IssueSearchResult = namedtuple("issue_search_results", ["status_code", "jira_issues"])
         url = f'{self.base_url}api/3/search?jql={search_query}'
         try:
@@ -232,13 +311,28 @@ class JiraAPI:
     def issue_create(self, summary, project_id=None, issue_type_id=None, description=None, assignee=None, priority=None):
         """
         Create a Jira issue.
-        :param project_id: Project ID
-        :param summary: Issue summary
-        :param issue_type_id: Issue type ID (default: 12412)
-        :param description: Issue description
-        :param assignee: Assignee account ID, optional
-        :param priority: Priority ID, optional (default: 10100)
-        :return: namedtuple("issue", ["status_code", "issue_info","id", "key", "issue_url"])
+
+        This function interacts with the Jira API to create an issue in a specified project.
+
+        :param project_id: The ID of the project where the issue will be created.
+        :type project_id: str
+        :param summary: The summary (short description) of the issue.
+        :type summary: str
+        :param issue_type_id: The type of issue to create (default: 12412).
+        :type issue_type_id: int, optional
+        :param description: A longer description of the issue, optional.
+        :type description: str, optional
+        :param assignee: The account ID of the person to assign the issue to, optional.
+        :type assignee: str, optional
+        :param priority: The priority of the issue (default: 10100), optional.
+        :type priority: int, optional
+        :return: A namedtuple representing the created issue with the fields:
+                 - `status_code` (int): The HTTP status code of the response.
+                 - `issue_info` (dict): Additional information about the created issue.
+                 - `id` (str): The ID of the newly created issue.
+                 - `key` (str): The Jira key of the created issue (e.g., "PROJECT-123").
+                 - `issue_url` (str): The URL of the created issue in Jira.
+        :rtype: namedtuple("issue", ["status_code", "issue_info", "id", "key", "issue_url"])
         """
         IssueInfo = namedtuple("issue", ["status_code", "issue_info","id", "key", "issue_url"])
         if project_id is None: project_id = self.project_id
@@ -282,10 +376,18 @@ class JiraAPI:
 
     def issue_transition(self, issue_id, transition_id):
         """
-        Transition a Jira issue.
-        :param issue_id: Jira issue ID
-        :param transition_id: Transition ID
-        :return: Status code. Error returns status code -37.
+        Transitions a specified issue in a project management system to a new state using
+        a provided transition ID. This involves making a POST request to the system's API
+        while handling potential exceptions and logging outcomes.
+
+        :param issue_id: Identifier for the issue to be transitioned.
+        :type issue_id: str
+        :param transition_id: Identifier for the transition to apply to the issue.
+        :type transition_id: str
+        :return: Status code of the API response, or custom error status codes for
+                 exceptional conditions (-37 or -37.1).
+
+        :rtype: int
         """
         payload = json.dumps({"transition": {"id": transition_id}})
         url = f'{self.base_url}api/3/issue/{issue_id}/transitions'
@@ -306,11 +408,27 @@ class JiraAPI:
 
     def issue_field_update(self, issue_id, field_update_dict) -> int:
         """
-        Update a field in a Jira issue.
-        :param issue_id: Jira issue ID
-        :param field_update_dict: Field dictionary.
-        :return: Status code
-        :Example: field_update_data = {"customfield_14064": [{"accountId": "712020:d4f13f91-ed7f-493d-8fef-4029b44eb7cb"},{"accountId": "5a4e734573cadb08a03ed16c"}]}
+        Updates the fields of a specific issue in the issue tracking system by sending
+        a PUT request to the API endpoint. This method allows updating multiple fields
+        at once by providing a dictionary of field names and their corresponding new
+        values.
+
+        If the update operation is successful, it logs the changes and returns the
+        HTTP response status code. In case of an HTTP error or other exceptions, it logs
+        the appropriate error details and returns specific negative status codes to
+        indicate failure.
+
+        :param issue_id: The unique identifier of the issue to be updated.
+        :type issue_id: str
+        :param field_update_dict: Dictionary containing the fields to update
+            and their new values. The keys in the dictionary represent the field
+            names, and the values represent the new data for those fields.
+            Example: field_update_data = {"customfield_14064": [{"accountId": "712020:d4f13f91-ed7f-493d-8fef-4029b44eb7cb"},{"accountId": "5a4e734573cadb08a03ed16c"}]}
+        :type field_update_dict: dict
+        :return: The HTTP status code of the update request if successful, or a
+            specific negative status code indicating an error (-35 for general
+            exceptions, -35.1 for HTTP errors).
+        :rtype: int
         """
         payload = json.dumps({"fields": field_update_dict})
         url = f'{self.base_url}api/3/issue/{issue_id}'
@@ -330,11 +448,23 @@ class JiraAPI:
 
     def issue_detail(self, issue_id, include_forms=False):
         """
-        Retrieve the detail for a Jira issue. Also includes the issue forms if include_forms=True.
-        :param issue_id: Jira issue ID
-        :param include_forms: True/False. Default False. Option to include forms.
-        :return: Namedtuple. issue_detail_info(status_code, jira_issue_info_dict[reporter_account_id, reporter_email_address, issue_status_id, issue_status_name,
-                                change_start_datetime, assignee_id, assignee_email_address], jira_issue_dict, question_response_df)
+        Retrieves the details of a Jira issue, including various metadata and optionally form responses. It fetches
+        issue details such as reporter information, assignee information, status, and custom fields. If
+        `include_forms` is set to `True`, it extracts additional data from Proforma forms present in the issue and
+        merges questions and responses into a pandas DataFrame.
+
+        This method makes an authenticated HTTP request to the Jira API to retrieve the specified issue's details.
+        It processes the response to parse issue metadata and optional form-related data.
+
+        :param issue_id: The unique identifier of the Jira issue
+        :param include_forms: If set to True, retrieves and processes forms associated with the issue.
+        :return: A named tuple containing the following elements:
+            - `status_code` (int): The HTTP status code of the request.
+            - `jira_issue_info_dict` (dict): Metadata and details about the Jira issue.
+            - `jira_issue_dict` (dict): Raw API response data from Jira.
+            - `question_response_df` (pandas.DataFrame): A DataFrame containing Proforma form responses, if `include_forms` is True.
+        :rtype: namedtuple
+        :raises: Handles HTTP error or generic exceptions during API requests or data processing.
         """
         issue_detail_info = namedtuple("issue_detail_info", ["status_code", "jira_issue_info_dict", "jira_issue_dict",
                                                              "question_response_df"])
@@ -450,10 +580,18 @@ class JiraAPI:
 
     def issue_add_comment(self, issue_id, comment):
         """
-        Add a comment to an issue.
-        :param issue_id: Jira issue ID
-        :param comment: Comment text
-        :return: Status code
+        Adds a comment to a specified issue in the issue tracking system.
+
+        This method sends a POST request to the specified issue endpoint with the
+        given comment payload. The content of the comment is added to the issue
+        identified by the `issue_id`. The method verifies the response, logs the success
+        or failure event, and returns the status code based on the operation outcome.
+
+        :param issue_id: The identifier of the issue to which the comment will be added
+                        (str).
+        :param comment: The text of the comment to be added to the issue (str).
+        :return: The HTTP response status code of the action. Returns -33.1 in case of
+                 an HTTP error and -33 in case of a general exception (int).
         """
         payload = json.dumps({"body": {"content": [{"content": [{"text": comment, "type": "text"}], "type": "paragraph"}],
                             "type": "doc", "version": 1}})
@@ -474,10 +612,17 @@ class JiraAPI:
 
     def issue_assign(self, issue_id, accountId) -> int:
         """
-        Assign a Jira issue.
-        :param issue_id: Jira issue id
-        :param accountId: Jira account id
-        :return: status_code. Error returns -32
+        Assigns an issue to a specified user in the system using the provided issue ID and account ID.
+        This method sends a PUT request to the respective API endpoint to assign the issue. It logs
+        the outcome and returns the HTTP status code or a specific error code in case of a failure.
+
+        :param issue_id: The unique identifier of the issue to be assigned.
+        :type issue_id: str
+        :param accountId: The account ID of the user to whom the issue will be assigned.
+        :type accountId: str
+        :return: HTTP status code if assignment is successful, -34 for a general error, or -34.1
+                 for HTTP request-related errors.
+        :rtype: int
         """
         payload = json.dumps({"accountId": accountId})
         url = f'{self.base_url}api/3/issue/{issue_id}/assignee'
@@ -497,10 +642,17 @@ class JiraAPI:
 
     def issue_add_attachment(self, issue_id, file_attachment) -> int:
         """
-        Adds attachment to issue.
-        :param issue_id: Jira issue id
-        :param file_attachment: Full path to file attachment.
-        :return: status_code. Error returns -33
+        Adds an attachment to a JIRA issue. This method uploads a file attachment to the specified
+        JIRA issue using the JIRA REST API. The file is identified by its path, and JIRA-specific
+        headers are configured to handle the attachment upload correctly.
+
+        This method attempts to post the given file as an attachment to the JIRA issue identified
+        by its ID. The file's application type is determined internally using a helper function.
+
+        :param str issue_id: The unique identifier of the issue to which the attachment will be added.
+        :param str file_attachment: The path to the file that needs to be attached.
+        :return: The HTTP status code of the response for successful upload, negative values for errors.
+        :rtype: int
         """
         headers_jira_auth_upload = {
             "Accept": "application/json",
@@ -510,7 +662,7 @@ class JiraAPI:
         payload = {"file": (file_attachment, open(file_attachment, "rb"), application_type)}
         url = f'{self.base_url}api/3/issue/{issue_id}/attachments'
         try:
-            response = requests.post(url, headers=self.headers, auth=self._auth, files=payload)
+            response = requests.post(url, headers=headers_jira_auth_upload, auth=self._auth, files=payload)
             response.raise_for_status()
             self.logger.info(f"Issue attachment added: {response.status_code}; Issue ID: {issue_id}; Attachment: {file_attachment}")
             return response.status_code
@@ -525,10 +677,23 @@ class JiraAPI:
 
     def issue_changelog(self, issue_id, max_results=1000) -> object:
         """
-        Retrieve changelog for a Jira issue.
-        :param issue_id: Jira issue ID
-        :param max_results: Defaults to 1000. The number of results to retrieve.
-        :return: changelog_dict {status_code, changelog_entries, status_exception_comment}
+        Fetches the changelog entries for a specific issue from the Jira API. The method sends
+        a GET request to the Jira API endpoint for issue changelogs, using the provided issue ID
+        and an optional maximum result limit. Returns a dictionary that contains the HTTP status
+        code, retrieved changelog entries, or details about any exception encountered during the request.
+
+        :param issue_id: The identifier of the issue whose changelog is to be retrieved.
+        :type issue_id: str
+        :param max_results: The maximum number of changelog entries to retrieve. Defaults to 1000.
+        :type max_results: int, optional
+        :return: A dictionary containing:
+            - status_code (float): The HTTP status code of the response or a custom error code
+              if an exception occurs.
+            - changelog_entries (object): The JSON parsed changelog entries retrieved from the
+              API, or None if an error occurs.
+            - status_exception_comment (str): A message describing any exception encountered,
+              or None if the request is successful.
+        :rtype: dict
         """
         changelog_dict = {'status_code': None, 'changelog_entries': None, 'status_exception_comment': None}
         url = f'{self.base_url}api/3/issue/{issue_id}/changelog?maxResults={max_results}'
@@ -556,9 +721,22 @@ class JiraAPI:
 
     def issue_types_user(self, as_dataframe=False) -> object:
         """
-        Retrieve issue types for the logged in user.
-        :param as_dataframe: Return result as pandas DataFrame if True
-        :return: Named Tuple. IssueTypes(status_code, issue_types)
+        Retrieves the issue types available for the user from the API and returns them
+        in the specified format. The retrieval is done via a GET request to the
+        designated endpoint. The result can be returned either as a raw dictionary or
+        formatted as a DataFrame. Any errors during the process are handled and logged,
+        with status codes indicating success or failure.
+
+        :param as_dataframe: Determines whether the response will be converted into
+            a pandas DataFrame or returned as a dictionary. Defaults to False.
+            If True, the response will be formatted as a pandas DataFrame. If False,
+            a raw dictionary is returned.
+        :type as_dataframe: bool
+        :return: A named tuple containing the status code and the retrieved issue types.
+            If an error occurs during the retrieval process, the status code in the
+            returned tuple will indicate the nature of the error, and the issue types
+            part of the tuple will be empty.
+        :rtype: namedtuple
         """
         IssueTypes = namedtuple("issue_types", ["status_code", "issue_types"])
         url = f'{self.base_url}api/3/issuetype'
@@ -583,10 +761,23 @@ class JiraAPI:
 
     def issue_statuses(self, projectLevel=True, as_dataframe=False) -> object:
         """
-        Retrieve issue statuses. By default restricted to the project level.
-        :param projectLevel: Default True. If false retrieves all statuses.
-        :param as_dataframe: Return result as pandas DataFrame if True
-        :return: Named Tuple. IssueStatuses(status_code, issue_statuses)
+        Retrieves issue statuses for a project or globally based on the project-level flag.
+
+        The method retrieves issue statuses data by making an HTTP GET request to the
+        appropriate endpoint. If the `projectLevel` parameter is set to True, the request
+        is scoped to the specific project, otherwise it retrieves the global issue statuses.
+        The returned data can be optionally converted into a pandas DataFrame if the
+        `as_dataframe` parameter is set to True. The result, including the HTTP status
+        code and issue statuses data, is encapsulated in a named tuple `IssueStatuses`.
+
+        :param projectLevel: A boolean indicating if the request should be scoped to the
+            specific project (True) or retrieve global issue statuses (False).
+        :param as_dataframe: A boolean indicating if the issue statuses data should be
+            returned as a pandas DataFrame (True) or as a dictionary (False).
+        :return: A named tuple `IssueStatuses`:
+            -status_code
+            -issue_statuses: either as a dictionary or a pandas DataFrame.
+        :rtype: namedtuple
         """
         IssueStatuses = namedtuple("issue_statuses", ["status_code", "issue_statuses"])
         if projectLevel:
@@ -645,11 +836,21 @@ class JiraAPI:
 
     def role_add_user(self, role_id, accountId, project_id=None) -> int:
         """
-        Add user to a Jira role.
-        :param role_id: Jira role id
-        :param accountId: Jira account id
-        :param project_id: Optional. Project id. Defaults to self.project_id.
-        :return: status_code. Error returns -51
+        Add a user to a specified role for a given project in the system. This method sends a POST
+        request to the appropriate API endpoint with the required payload. The method will log
+        relevant information and errors during the execution, returning the HTTP response status
+        code or an error-specific code in case of failure.
+
+        :param role_id: The ID of the role to which the user will be added.
+        :type role_id: int
+        :param accountId: The ID of the user account to be added to the role.
+        :type accountId: str
+        :param project_id: The ID of the project associated with the role. Defaults to the object's
+            `project_id` if not specified.
+        :type project_id: Optional[int]
+        :return: The HTTP status code resulting from the API call. In case of errors, returns -51 for
+            general exceptions or -51.1 for HTTP errors.
+        :rtype: int
         """
         if project_id is None: project_id = self.project_id
         payload = json.dumps({"user": [accountId]})
@@ -668,13 +869,26 @@ class JiraAPI:
             self.logger.error(f"Status Code: {status_code}; Error adding user to role. Role ID: {role_id}; Account ID: {accountId}; Project: {project_id}; {e}")
             return status_code
 
-    def jira_role_get_users(self, role_id, project_id=None) -> object:
+    def role_get_users(self, role_id, project_id=None) -> object:
         """
-        Get users associated with Jira role.
-        :param role_id: Jira role id
-        :param project_id: Optional. Project id. Defaults to self.project_id.
-        :return: Namedtuple. role_info(status_code, jiraRole_users_df, jiraRole_dict)
-        :raises Error code = -50
+        Retrieve the users associated with a specified Jira role for a given project.
+
+        This method interacts with the Jira API to fetch details of users assigned to a specific
+        role within a project. The fetched data includes detailed information about the
+        users' accounts and builds a DataFrame to organize the data. If the project ID
+        is not explicitly provided, the method defaults to the project's ID already
+        associated with the instance of the object.
+
+        :param role_id: The unique identifier of the Jira role.
+        :type role_id: str
+        :param project_id: The unique identifier of the project, defaults to the instance's project ID.
+        :type project_id: str, optional
+        :return: A named tuple containing:
+            - status_code (int): The HTTP status code of the Jira API request.
+            - jiraRole_users_df (pandas.DataFrame): A DataFrame containing user details
+              associated with the role in the project.
+            - jiraRole_dict (dict): Raw dictionary data retrieved from the Jira API for the role.
+        :rtype: object
         """
         if project_id is None: project_id = self.project_id
         role_info = namedtuple("role_info", ["status_code", "jiraRole_users_df", "jiraRole_dict"])
@@ -704,11 +918,20 @@ class JiraAPI:
             self.logger.error(f"Status Code: {status_code}; Error retrieving Jira Role Users. Role ID: {role_id}; Project: {project_id}; {e}")
             return role_info(status_code, jiraRole_users_df, jiraRole_dict)
 
-    def jira_role_info(self, role_id, project_id=None) -> object:
+    def role_info(self, role_id, project_id=None) -> object:
         """
-        Get role information associated with Jira role. Returns role members as a dataframe.
-        :param role_id: Jira role id
-        :return: Namedtuple. role_info(status_code, jira_role_members_df)
+        Retrieves information about a specific Jira role in a given project. This includes details about
+        role members and associated metadata fetched from the Jira API. The information returned is
+        organized as a namedtuple containing the HTTP status code and a pandas DataFrame of role members.
+
+        :param role_id: The unique identifier of the Jira role.
+        :type role_id: int
+        :param project_id: The unique identifier of the Jira project. If not provided, it defaults to None.
+        :type project_id: Optional[int]
+        :return: Named tuple:
+            -status_code: the HTTP status code
+            -jira_role_members_df: a pandas DataFrame with Jira role members.
+        :rtype: namedtuple
         """
         role_info = namedtuple("role_info", ["status_code", "jira_role_members_df"])
         url = f'{self.base_url}api/3/project/{project_id}/role/{role_id}'
@@ -735,9 +958,18 @@ class JiraAPI:
 
     def response_type_ref(self, response_type) -> str:
         """
-        Used for processing Jira fields.
-        :param response_type: Input Jira field
-        :return: response_type_name
+        Maps a response type code to its corresponding human-readable name.
+
+        This function takes a response type code and returns the corresponding
+        string representation of the human-readable name. It uses a predefined
+        mapping to perform this transformation. If the provided response type
+        does not exist in the mapping, it returns `None`.
+
+        :param response_type: The code representing the type of response to be mapped.
+        :type response_type: str
+        :return: The human-readable name associated with the response type code,
+            or `None` if the code is not found.
+        :rtype: str
         """
         response_type_name = {
             'ts': 'Text Short'
@@ -760,9 +992,19 @@ class JiraAPI:
 
     def response_type_col_ref(self, response_type) -> str:
         """
-        Gets the field type for responses.
-        :param response_type: String
-        :return: response_col_name
+        Maps a given response type to its corresponding column reference name.
+
+        This function takes in a response type key (as a string) and returns the
+        mapped column reference name corresponding to the type. The mapping is
+        defined internally within the function through a dictionary. If the
+        provided response type is not found in the dictionary, the function
+        returns ``None``.
+
+        :param response_type: A string representing the type of response to be
+            mapped to a column name.
+        :return: The column name corresponding to the given response type. If
+            the response type is not found, returns ``None``.
+        :rtype: str or None
         """
         response_col_name = {
             'ts': 'textField'
@@ -785,9 +1027,19 @@ class JiraAPI:
 
 def get_file_application_type(file_attachment) -> str:
     """
-    Gets file type for encoding.
-    :param file_attachment: Full path to file attachment.
-    :return: application_type (i.e., application/octet-stream, txt/plain'
+    Determine the MIME type (application type) of a file attachment based on its extension.
+
+    This function evaluates the file extension to correctly classify its application type.
+    If the file extension is `.mmp`, it is categorized as `application/octet-stream`.
+    For other extensions, the function attempts to deduce the MIME type using the
+    `mimetypes.guess_type` library. If no type is found, it defaults to `text/plain`.
+
+    :param file_attachment: The file name or path representing the file attachment whose MIME
+        type needs to be determined.
+    :type file_attachment: str
+    :return: The MIME type of the given file attachment.
+    :rtype: str
+
     """
     file_extension = pathlib.Path(file_attachment).suffix
     file_extension = file_extension.strip('.')
@@ -801,11 +1053,28 @@ def get_file_application_type(file_attachment) -> str:
 
 def dict_as_key_value(input_dict, key_as_variable=False, as_json=False):
     """
-    Used to reformat a dictionary to a key-value pair. Useful for setting the variables dictionaries.
-    :param input_dict: Input dictionary containing name and id pairs.
-    :param key_as_variable: Default false. If true formats the key as a lowercase with underscores.
-    :param as_json: Default false. If true returns as formatted json.
-    :return: key_value
+    Converts a list of dictionaries into a key-value pair dictionary, where keys are formatted
+    based on the attribute `name` and values are derived from `id`. Provides the option to
+    format keys as valid variables and to return the dictionary as a JSON-formatted string.
+
+    :param input_dict: A list of dictionaries where each dictionary must include the attributes
+        `name` and `id`. Each dictionary in the list is converted and aggregated into the resulting
+        key-value pair dictionary.
+    :type input_dict: list[dict]
+
+    :param key_as_variable: A boolean flag indicating whether the keys should be formatted
+        as valid variable names. If set to True, the keys will be formatted as lowercase with
+        spaces replaced by underscores.
+    :type key_as_variable: bool, optional
+
+    :param as_json: A boolean flag indicating whether to return the resulting dictionary
+        as a JSON-formatted string or as a Python dictionary.
+    :type as_json: bool, optional
+
+    :return: The resultant dictionary containing key-value pairs derived from the input list of
+        dictionaries, formatted as requested. If `as_json` is True, the result is returned as a
+        JSON-formatted string.
+    :rtype: Union[dict, str]
     """
 
     def format_key(key):
