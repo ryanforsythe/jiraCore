@@ -1,5 +1,6 @@
 # Jira API 
 Performs Jira actions using the REST API.
+[Github Pages](https://ryanforsythe.github.io/jiraCore/)
 
 ## Keyring Credentials
 User credentials are stored in the Credentials Manager. To add or updated, go to 
