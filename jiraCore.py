@@ -7,8 +7,6 @@ from collections import namedtuple
 import mimetypes
 import pathlib
 import re
-from dotenv import load_dotenv
-import os
 import sys
 from loguru import logger
 
@@ -46,29 +44,31 @@ class JiraAPI:
     def __init__(self, project_key=None):
         """
         Constructor to initialize JiraAPI instance.
-        :param base_url: Jira base URL
-        :param username: Jira username
-        :param auth_token: Jira API token
+        :param project_key: Optional. The Jira project key. If not provided, the default project key will be used.
         """
         self.jvars = jvars.JiraVariables()
         self.init_logger()
         self.base_url = self.jvars.base_jira_url
         self._auth = None
-        self.headers = {"Accept": "application/json", "Content-Type": "application/json"}
         self.default_issue_type_id = self.jvars.default_issue_type_id
         self.default_priority_id = self.jvars.default_priority_id
+
+        self.headers = {"Accept": "application/json", "Content-Type": "application/json"}
+        self._auth = HTTPBasicAuth(self.jvars.jira_user_name, self.jvars._jira_password)
+        self._set_authenticated_headers()
+        self.authenticate()
+
         if project_key is None:
             self.default_project_key = self.jvars.default_project_key
         else: self.default_project_key = project_key
-        self.get_project_info(self.default_project_key)
+        self.project_info(self.default_project_key)
 
-        self._auth = HTTPBasicAuth(self.jvars.jira_user_name, self.jvars.jira_password)
-        self._set_authenticated_headers()
 
     def init_logger(self):
         LOGGER_LEVEL = self.jvars.log_level
         CONSOLE_LEVEL = 'DEBUG'
-        self.logger.add(jvars.log_location, rotation="30 MB", retention=5, enqueue=True, level=LOGGER_LEVEL)
+        self.logger = logger
+        self.logger.add(self.jvars.log_location, rotation="30 MB", retention=5, enqueue=True, level=LOGGER_LEVEL)
         time_format = "YYYY-MM-DD HH:mm:ss"
         console_format = f"<green>{{time:{time_format}}}</green> | <level>{{level: <8}}</level> | {{name}}:{{function}}:{{line}} - {{message}}"
         self.logger.add(sink=sys.stdout,
@@ -91,13 +91,21 @@ class JiraAPI:
         url = f'{self.base_url}api/3/myself'
         try:
             response = requests.get(url, headers=self.headers, auth=self._auth)
+            response.raise_for_status()
+            self.logger.debug(f"Authentication: {response.status_code}; {response.text}")
+            user_info = json.loads(response.text)
+            self.user_account_id = user_info.get("accountId")
             return response.status_code
+        except requests.exceptions.HTTPError as errh:
+            status_code = -14.1
+            self.logger.error(f"Status Code: {status_code}; Authentication failed: {errh}; {response.text}")
+            return status_code, str(errh)
         except Exception as e:
             status_code = -14
             self.logger.error(f"Status Code: {status_code}; Authentication failed: {e}")
             return status_code
         
-    def get_project_info(self, project_key):
+    def project_info(self, project_key):
         """
         Retrieve details for a Jira project.
         :param project_key: Project key
@@ -106,17 +114,22 @@ class JiraAPI:
         url = f'{self.base_url}api/3/project/{project_key}'
         try:
             response = requests.get(url, headers=self.headers, auth=self._auth)
+            response.raise_for_status()
             self.project_info = json.loads(response.text)
             self.project_id = jq.search('id',self.project_info)
             self.logger.debug(f"Project Key: {project_key}; Status Code: {response.status_code}; Result: {self.project_info}")
             return response.status_code
+        except requests.exceptions.HTTPError as errh:
+            status_code = -16.1
+            self.logger.error(f"Status Code: {status_code}; Error retrieving project info. Project Key: {project_key}; {errh}; {response.text}")
+            return status_code, str(errh)
         except Exception as e:
-            self.project_id = -1
+            self.project_id = '-1'
             status_code = -16
             self.logger.error(f"Status Code: {status_code}; Error retrieving project info. Project Key: {project_key}; {e}")
             return status_code
 
-    def get_user_info(self, account_id):
+    def user_info(self, account_id):
         """
         Get information related to a user.
         :param account_id: Jira account ID
@@ -128,40 +141,46 @@ class JiraAPI:
         url = f'{self.base_url}api/3/user'
         try:
             response = requests.get(url, headers=self.headers, auth=self._auth, params=query)
+            response.raise_for_status()
             user_data = json.loads(response.text)
             if user_data:
+                self.logger.debug(f"Account ID: {account_id}; Status Code: {response.status_code}; Result: {user_data}")
                 return user_info(
                     response.status_code, user_data, 1,
                     user_data.get("emailAddress"), user_data.get("displayName"), user_data.get("active")
                 )
-                self.logger.debug(f"Account ID: {account_id}; Status Code: {response.status_code}; Result: {user_data}")
             else:
                 self.logger.warning(f"User not found. Account ID: {account_id}")
                 return user_info(response.status_code, {}, 0, "", "", False)
+        except requests.exceptions.HTTPError as errh:
+            status_code = -17.1
+            self.logger.error(f"Status Code: {status_code}; Error retrieving user info. Account ID: {account_id}; {errh}; {response.text}")
+            return status_code, str(errh)
         except Exception as e:
-            status_code = -17;
+            status_code = -17
             self.logger.error(f"Status Code: {status_code}; Error retrieving user info. Account ID: {account_id}; {e}")
             return user_info(status_code, {}, -1, "", "", False)
 
-    def get_user_by_email(self, email_address):
+    def user_by_email(self, email_address):
         """
         Get information related to a user by passing the email address.
-        :param account_id: Jira account ID
+        :param email_address: Jira email address. Example: <EMAIL>
         :return: Namedtuple user_info(status_code, jira_user_dict, jira_user_found)
         """
         user_info = namedtuple("user_info", ["status_code", "jira_user_dict", "jira_user_found"])
 
         pattern = re.compile(r'^[a-z0-9]+[\._]?[a-z0-9]+[@]\w+[.]\w+$', re.IGNORECASE)
         if pattern.match(email_address) is None:
-            status_code = -18.1;
-            jira_user_found = -1;
+            status_code = -18.1
+            jira_user_found = -1
             jira_user_dict = []
             self.logger.warning(f"Status Code: {status_code}; Invalid email address. Email Address: {email_address}")
             return user_info(status_code, {}, 0)
         else:
             try:
-                url = f'{self.base_url}api/3/user'
+                url = f'{self.base_url}api/3/user/search/?query={email_address}'
                 response = requests.get(url, headers=self.headers, auth=self._auth)
+                response.raise_for_status()
                 user_data = json.loads(response.text)
                 self.logger.debug(f"Email Address: {email_address}; Status Code: {response.status_code}; Result: {user_data}")
                 if user_data:
@@ -173,8 +192,12 @@ class JiraAPI:
                 else:
                     self.logger.warning(f"User not found. Email Address: {email_address}")
                     return user_info(response.status_code, {}, 0)
+            except requests.exceptions.HTTPError as errh:
+                status_code = -18.1
+                self.logger.error(f"Status Code: {status_code}; Error retrieving user info. Email Address: {email_address}; {errh}; {response.text}")
+                return status_code, str(errh)
             except Exception as e:
-                status_code = -18;
+                status_code = -18
                 self.logger.error(f"Status Code: {status_code}; Error retrieving user info. Email Address: {email_address}; {e}")
                 return user_info(status_code, {}, -1)
 
@@ -183,12 +206,13 @@ class JiraAPI:
         Search Jira issues based on a query.
         :param search_query: Jira search query (JQL)
         :param as_dataframe: Return result as pandas DataFrame if True
-        :return: Search results in the desired format
+        :return: namedtuple("issue_search_results", ["status_code", "jira_issues"])
         """
         IssueSearchResult = namedtuple("issue_search_results", ["status_code", "jira_issues"])
         url = f'{self.base_url}api/3/search?jql={search_query}'
         try:
             response = requests.get(url, headers=self.headers, auth=self._auth)
+            response.raise_for_status()
             result_dict = json.loads(response.text)
             self.logger.debug(f"Search query: {search_query}; Result: {result_dict}")
             if as_dataframe:
@@ -196,6 +220,10 @@ class JiraAPI:
             else:
                 jira_issues = result_dict
             return IssueSearchResult(response.status_code, jira_issues)
+        except requests.exceptions.HTTPError as errh:
+            status_code = -21.1
+            self.logger.error(f"Status Code: {status_code}; Error searching for issues. Query: {search_query}; {errh}; {response.text}")
+            return status_code, str(errh)
         except Exception as e:
             status_code = -21
             self.logger.error(f"Status Code: {status_code}; Error searching for issues. Query: {search_query}; {e}")
@@ -210,12 +238,13 @@ class JiraAPI:
         :param description: Issue description
         :param assignee: Assignee account ID, optional
         :param priority: Priority ID, optional (default: 10100)
-        :return: Status code and issue info
+        :return: namedtuple("issue", ["status_code", "issue_info","id", "key", "issue_url"])
         """
+        IssueInfo = namedtuple("issue", ["status_code", "issue_info","id", "key", "issue_url"])
         if project_id is None: project_id = self.project_id
         if issue_type_id is None: issue_type_id = self.default_issue_type_id
         if description is None: description = ""
-        if assignee is None: assignee = ""
+        if assignee is None: assignee = self.user_account_id
         if priority is None: priority = self.default_priority_id
         priority = json.loads(f'"{priority}"')
         input_json = {
@@ -229,7 +258,7 @@ class JiraAPI:
                     "version": 1,
                 },
                 "issuetype": {"id": issue_type_id},
-                "priority": {"id": priority},
+                #"priority": {"id": priority},
                 "project": {"id": project_id},
                 "summary": summary,
             }
@@ -238,12 +267,18 @@ class JiraAPI:
         url = f'{self.base_url}api/3/issue'
         try:
             response = requests.post(url, headers=self.headers, auth=self._auth, data=payload)
+            response.raise_for_status()
+            issue_info = json.loads(response.text)
             logger.info(f"Issue created: {response.status_code}; Project: {project_id}; Summary: {summary}; Issue Type: {issue_type_id}; Priority: {priority}; Assignee: {assignee}; ")
-            return response.status_code, response.json()
+            return IssueInfo(response.status_code, issue_info, issue_info.get("id"), issue_info.get("key"), issue_info.get("self"))
+        except requests.exceptions.HTTPError as errh:
+            status_code = -35.1
+            logger.error(f"Status Code: {status_code}; Error creating issue; Project: {project_id}; Summary: {summary}; Issue Type: {issue_type_id}; Priority: {priority}; Assignee: {assignee}; {errh}; {response.text}")
+            return IssueInfo(response.status_code, [], -1 , "", "")
         except Exception as e:
             status_code = -35
             logger.error(f"Status Code: {status_code}; Error creating issue; Project: {project_id}; Summary: {summary}; Issue Type: {issue_type_id}; Priority: {priority}; Assignee: {assignee}; {e}")
-            return status_code, str(e)
+            return IssueInfo(response.status_code, [], -1 , "", "")
 
     def issue_transition(self, issue_id, transition_id):
         """
@@ -256,8 +291,14 @@ class JiraAPI:
         url = f'{self.base_url}api/3/issue/{issue_id}/transitions'
         try:
             response = requests.post(url, headers=self.headers, auth=self._auth, data=payload)
+            response.raise_for_status()
             self.logger.info(f"Issue transitioned: {response.status_code}; Issue ID: {issue_id}; Transition ID: {transition_id}")
             return response.status_code
+        except requests.exceptions.HTTPError as errh:
+            status_code = -37.1
+            self.logger.error(
+                f"Status Code: {status_code}; Error transitioning issue. Issue ID: {issue_id}; Transition ID: {transition_id}; {errh}; {response.text}")
+            return status_code
         except Exception as e:
             status_code = -37
             self.logger.error(f"Status Code: {status_code}; Error transitioning issue. Issue ID: {issue_id}; Transition ID: {transition_id}; {e}")
@@ -267,7 +308,7 @@ class JiraAPI:
         """
         Update a field in a Jira issue.
         :param issue_id: Jira issue ID
-        :param field_udpate_dict: Field dictionary.
+        :param field_update_dict: Field dictionary.
         :return: Status code
         :Example: field_update_data = {"customfield_14064": [{"accountId": "712020:d4f13f91-ed7f-493d-8fef-4029b44eb7cb"},{"accountId": "5a4e734573cadb08a03ed16c"}]}
         """
@@ -275,8 +316,13 @@ class JiraAPI:
         url = f'{self.base_url}api/3/issue/{issue_id}'
         try:
             response = requests.put(url, headers=self.headers, auth=self._auth, data=payload)
+            response.raise_for_status()
             self.logger.info(f"Issue field updated: {response.status_code}; Issue ID: {issue_id}")
             return response.status_code
+        except requests.exceptions.HTTPError as errh:
+            status_code = -35.1
+            self.logger.error(f"Status Code: {status_code}; Error updating issue. Issue ID: {issue_id}; Field Data: {field_update_dict}; {errh}; {response.text}")
+            return status_code
         except Exception as e:
             status_code = -35
             self.logger.error(f"Status Code: {status_code}; Error updating issue. Issue ID: {issue_id}; Field Data: {field_update_dict}; {e}")
@@ -295,6 +341,7 @@ class JiraAPI:
         url = f'{self.base_url}api/3/issue/{issue_id}?properties=*all'
         try:
             response = requests.get(url, headers=self.headers, auth=self._auth)
+            response.raise_for_status()
             status_code = response.status_code
             # jiraIssueDetail_json = json.loads(jiraIssueDetail.text)
             # print(jiraIssueForms.text)
@@ -390,6 +437,11 @@ class JiraAPI:
                 self.logger.debug(f"Issue detail. Issue ID: {issue_id}; Status Code: {status_code}; Result: {jira_issue_dict}; Detail: {jira_issue_info_dict}")
                 return issue_detail_info(status_code, jira_issue_info_dict, jira_issue_dict, question_response_df)
             # print(question_response_df)
+        except requests.exceptions.HTTPError as errh:
+            status_code = -30.1
+            self.logger.error(f"Status Code:{status_code}; Error retrieving Issue Detail. Issue ID: {issue_id} message:{errh}; {response.text}")
+            question_response_df = pd.DataFrame()
+            return issue_detail_info(status_code, [], {}, question_response_df)
         except Exception as e:
             status_code = -30
             self.logger.error(f"Status Code:{status_code}; Error retrieving Issue Detail. Issue ID: {issue_id} message:{e}")
@@ -407,9 +459,14 @@ class JiraAPI:
                             "type": "doc", "version": 1}})
         url = f'{self.base_url}api/3/issue/{issue_id}/comment'
         try:
-            response = requests.post(url, headers=self.headers, auth=self._auth, json=payload)
+            response = requests.post(url, headers=self.headers, auth=self._auth, data=payload)
+            response.raise_for_status()
             self.logger.info(f"Added comment to issue: {response.status_code}; Issue ID: {issue_id}; Comment: {comment}")
             return response.status_code
+        except requests.exceptions.HTTPError as errh:
+            status_code = -33.1
+            self.logger.error(f"Status Code: {status_code}; Error adding comment to issue. Issue ID: {issue_id}; Comment: {comment}; {errh}; {response.text}")
+            return status_code
         except Exception as e:
             status_code = -33
             self.logger.error(f"Status Code: {status_code}; Error adding comment to issue. Issue ID: {issue_id}; Comment: {comment}; {e}")
@@ -418,7 +475,7 @@ class JiraAPI:
     def issue_assign(self, issue_id, accountId) -> int:
         """
         Assign a Jira issue.
-        :param jira_issue_id: Jira issue id
+        :param issue_id: Jira issue id
         :param accountId: Jira account id
         :return: status_code. Error returns -32
         """
@@ -426,8 +483,13 @@ class JiraAPI:
         url = f'{self.base_url}api/3/issue/{issue_id}/assignee'
         try:
             response = requests.put(url, headers=self.headers, auth=self._auth, data=payload)
+            response.raise_for_status()
             self.logger.info(f"Issue assigned: {response.status_code}; Issue ID: {issue_id}; Assignee: {accountId}")
             return response.status_code
+        except requests.exceptions.HTTPError as errh:
+            status_code = -34.1
+            self.logger.error(f"Status Code: {status_code}; Error assigning issue. Issue ID: {issue_id}; Assignee: {accountId}; {errh}; {response.text}")
+            return status_code
         except Exception as e:
             status_code = -34
             self.logger.error(f"Status Code: {status_code}; Error assigning issue. Issue ID: {issue_id}; Assignee: {accountId}; {e}")
@@ -449,8 +511,13 @@ class JiraAPI:
         url = f'{self.base_url}api/3/issue/{issue_id}/attachments'
         try:
             response = requests.post(url, headers=self.headers, auth=self._auth, files=payload)
+            response.raise_for_status()
             self.logger.info(f"Issue attachment added: {response.status_code}; Issue ID: {issue_id}; Attachment: {file_attachment}")
             return response.status_code
+        except requests.exceptions.HTTPError as errh:
+            status_code = -33.1
+            self.logger.error(f"Status Code: {status_code}; Error adding attachment to issue. Issue ID: {issue_id}; Attachment: {file_attachment}; {errh}; {response.text}")
+            return status_code
         except Exception as e:
             status_code = -33
             self.logger.error(f"Status Code: {status_code}; Error adding attachment to issue. Issue ID: {issue_id}; Attachment: {file_attachment}; {e}")
@@ -467,9 +534,17 @@ class JiraAPI:
         url = f'{self.base_url}api/3/issue/{issue_id}/changelog?maxResults={max_results}'
         try:
             response = requests.get(url, headers=self.headers, auth=self._auth)
+            response.raise_for_status()
             changelog_entries = json.loads(response.text)
             changelog_dict.update({'status_code': response.status_code, 'changelog_entries': changelog_entries})
             self.logger.debug(f"Changelog. Issue ID: {issue_id}; Status Code: {response.status_code}")
+            return changelog_dict
+        except requests.exceptions.HTTPError as errh:
+            status_code = -36.1
+            status_exception_comment = f"Error retrieving changelog. {errh}; {response.text}"
+            self.logger.error(f"Status Code: {status_code}; Issue ID: {issue_id}; {status_exception_comment}")
+            changelog_dict.update(
+                {"status_code": status_code, "status_exception_comment": status_exception_comment})
             return changelog_dict
         except Exception as e:
             status_code = -36
@@ -479,10 +554,98 @@ class JiraAPI:
                 {"status_code": status_code, "status_exception_comment": status_exception_comment})
             return changelog_dict
 
+    def issue_types_user(self, as_dataframe=False) -> object:
+        """
+        Retrieve issue types for the logged in user.
+        :param as_dataframe: Return result as pandas DataFrame if True
+        :return: Named Tuple. IssueTypes(status_code, issue_types)
+        """
+        IssueTypes = namedtuple("issue_types", ["status_code", "issue_types"])
+        url = f'{self.base_url}api/3/issuetype'
+        try:
+            response = requests.get(url, headers=self.headers, auth=self._auth)
+            response.raise_for_status()
+            issue_types_dict = json.loads(response.text)
+            self.logger.debug(f"User Issue Types. Status Code: {response.status_code}")
+            if as_dataframe:
+                issue_types = pd.json_normalize(issue_types_dict, errors='ignore', sep='_')
+            else:
+                issue_types = issue_types_dict
+            return IssueTypes(response.status_code, issue_types)
+        except requests.exceptions.HTTPError as errh:
+            status_code = -61.1
+            logger.error(f"Status Code: {status_code}; Error retrieving user issue types; {errh}; {response.text}")
+            return IssueTypes(status_code, [])
+        except Exception as e:
+            status_code = -61
+            logger.error(f"Status Code: {status_code}; Error retrieving user issue types; {e}")
+            return IssueTypes(status_code, [])
+
+    def issue_statuses(self, projectLevel=True, as_dataframe=False) -> object:
+        """
+        Retrieve issue statuses. By default restricted to the project level.
+        :param projectLevel: Default True. If false retrieves all statuses.
+        :param as_dataframe: Return result as pandas DataFrame if True
+        :return: Named Tuple. IssueStatuses(status_code, issue_statuses)
+        """
+        IssueStatuses = namedtuple("issue_statuses", ["status_code", "issue_statuses"])
+        if projectLevel:
+            url = f'{self.base_url}api/3/statuses/search?projectId={self.project_id}'
+        else:
+            url = f'{self.base_url}api/3/statuses/search'
+        try:
+            response = requests.get(url, headers=self.headers, auth=self._auth)
+            response.raise_for_status()
+            issue_statuses_dict = json.loads(response.text)
+            self.logger.debug(f"Issue Statuses. Status Code: {response.status_code}")
+            if as_dataframe:
+                issue_statuses = pd.json_normalize(issue_statuses_dict, errors='ignore', sep='_')
+            else:
+                issue_statuses = issue_statuses_dict
+            return IssueStatuses(response.status_code, issue_statuses)
+        except requests.exceptions.HTTPError as errh:
+            status_code = -71.1
+            logger.error(f"Status Code: {status_code}; Error retrieving user issue statuses; {errh}; {response.text}")
+            return IssueStatuses(status_code, [])
+        except Exception as e:
+            status_code = -71
+            logger.error(f"Status Code: {status_code}; Error retrieving user issue statuses; {e}")
+            return IssueStatuses(status_code, [])
+
+    """Experimental as of 03/14/2025
+    def project_issue_types(self, project_id=None, as_dataframe=False) -> object:
+
+        IssueTypes = namedtuple("issue_types", ["status_code", "issue_types"])
+        if project_id is None: project_id = self.project_id
+        #url = f'{self.base_url}api/3/issuetype/project'
+        url = f'{self.base_url}api/3/issuetype'
+        #query_json = {"projectId": project_id }
+        #query = json.dumps(query_json)
+        query = {'projectId': '{10000}'}
+        try:
+            #response = requests.get(url, headers=self.headers, auth=self._auth, params=query)
+            response = requests.get(url, headers=self.headers, auth=self._auth)
+            response.raise_for_status()
+            issue_types_dict = json.loads(response.text)
+            self.logger.debug(f"Project Issue Types. Issue ID: {project_id}; Status Code: {response.status_code}")
+            if as_dataframe:
+                jira_issues = pd.json_normalize(issue_types_dict, record_path=['issues'], errors='ignore', sep='_')
+            else:
+                issue_types = issue_types_dict
+            return IssueTypes(response.status_code, issue_types)
+        except requests.exceptions.HTTPError as errh:
+            status_code = -36
+            logger.error(f"Status Code: {status_code}; Error retrieving project issue types; Project: {project_id}; {errh}; {response.text}")
+            return IssueTypes(status_code, [])
+        except Exception as e:
+            status_code = -36
+            logger.error(f"Status Code: {status_code}; Error retrieving project issue types; Project: {project_id}; {e}")
+            return IssueTypes(status_code, [])
+    """
+
     def role_add_user(self, role_id, accountId, project_id=None) -> int:
         """
         Add user to a Jira role.
-        :param auth: Authentication token.
         :param role_id: Jira role id
         :param accountId: Jira account id
         :param project_id: Optional. Project id. Defaults to self.project_id.
@@ -493,8 +656,13 @@ class JiraAPI:
         url = f'{self.base_url}api/3/project/{project_id}/role/{role_id}'
         try:
             response = requests.post(url, headers=self.headers, auth=self._auth, data=payload)
+            response.raise_for_status()
             self.logger.info(f"Role Add User. Role ID: {role_id}; Account ID: {accountId}; Project: {project_id}; Status Code: {response.status_code}")
             return response.status_code
+        except requests.exceptions.HTTPError as errh:
+            status_code = -51.1
+            self.logger.error(f"Status Code: {status_code}; Error adding user to role. Role ID: {role_id}; Account ID: {accountId}; Project: {project_id}; {errh}; {response.text}")
+            return status_code
         except Exception as e:
             status_code = -51
             self.logger.error(f"Status Code: {status_code}; Error adding user to role. Role ID: {role_id}; Account ID: {accountId}; Project: {project_id}; {e}")
@@ -503,7 +671,6 @@ class JiraAPI:
     def jira_role_get_users(self, role_id, project_id=None) -> object:
         """
         Get users associated with Jira role.
-        :param auth: Authentication token.
         :param role_id: Jira role id
         :param project_id: Optional. Project id. Defaults to self.project_id.
         :return: Namedtuple. role_info(status_code, jiraRole_users_df, jiraRole_dict)
@@ -514,6 +681,7 @@ class JiraAPI:
         url = f'{self.base_url}api/3/project/{project_id}/role/{role_id}'
         try:
             response = requests.get(url, headers=self.headers, auth=self._auth)
+            response.raise_for_status()
             jiraRole_dict = json.loads(response.text)
             jiraRole_users_df = pd.json_normalize(jiraRole_dict, record_path=['actors'], errors='ignore', sep='_')
             jiraRole_users_df.loc[:, "user_email"] = ""
@@ -523,6 +691,12 @@ class JiraAPI:
                 jiraRole_users_df.loc[ind, "user_email"] = user_info.jira_user_email
             self.logger.debug(f"Jira Role Users. Role ID: {role_id}; Project: {project_id}; Status Code: {response.status_code}")
             return role_info(response.status_code, jiraRole_users_df, jiraRole_dict)
+        except requests.exceptions.HTTPError as errh:
+            status_code = -50.1
+            jiraRole_dict = {}
+            jiraRole_users_df = pd.DataFrame()
+            self.logger.error(f"Status Code: {status_code}; Error retrieving Jira Role Users. Role ID: {role_id}; Project: {project_id}; {errh}; {response.text}")
+            return role_info(status_code, jiraRole_users_df, jiraRole_dict)
         except Exception as e:
             status_code = -50
             jiraRole_dict = {}
@@ -533,7 +707,6 @@ class JiraAPI:
     def jira_role_info(self, role_id, project_id=None) -> object:
         """
         Get role information associated with Jira role. Returns role members as a dataframe.
-        :param auth:  Authentication token.
         :param role_id: Jira role id
         :return: Namedtuple. role_info(status_code, jira_role_members_df)
         """
@@ -541,19 +714,21 @@ class JiraAPI:
         url = f'{self.base_url}api/3/project/{project_id}/role/{role_id}'
         try:
             response = requests.get(url, headers=self.headers, auth=self._auth)
+            response.raise_for_status()
             status_code = response.status_code
-            # print(f"{jiraProjInfo.status_code};{jiraProjInfo.text}")
-            # print(jiraRoleInfo.text)
+            self.logger.debug(f"Role Info: {response.status_code};{response.text}")
             jira_role_json = json.loads(response.text)
             jira_role__dict = dict(response.json())
-            # print(responseList.text)
-            # response_df = pd.json_normalize(responseList_json, record_path=['result'], errors='ignore', sep='_', record_prefix='dossier_')
             jira_role_members_df = pd.json_normalize(jira_role_json, record_path=['actors'], errors='ignore', sep='_')
             self.logger.debug(f"Jira Role Info. Role ID: {role_id}; Project: {project_id}; Status Code: {status_code}")
             return role_info(status_code, jira_role_members_df)
+        except requests.exceptions.HTTPError as errh:
+            status_code = -17.1
+            jira_role_members_df = pd.dataframe()
+            self.logger.error(f"Status Code: {status_code}; Error retrieving Jira Role Info. Role ID: {role_id}; Project: {project_id}; {errh}; {response.text}")
+            return role_info(status_code, jira_role_members_df)
         except Exception as e:
             status_code = -17
-            # print(f"{jiraProjInfo.status_code};{jiraProjInfo.text}")
             jira_role_members_df = pd.dataframe()
             self.logger.error(f"Status Code: {status_code}; Error retrieving Jira Role Info. Role ID: {role_id}; Project: {project_id}; {e}")
             return role_info(status_code, jira_role_members_df)
@@ -623,3 +798,34 @@ def get_file_application_type(file_attachment) -> str:
         if application_type is None: application_type = 'txt/plain'
     return application_type
     # Additional methods (e.g., attaching files, fetching changelogs, etc.) can be similarly refactored
+
+def dict_as_key_value(input_dict, key_as_variable=False, as_json=False):
+    """
+    Used to reformat a dictionary to a key-value pair. Useful for setting the variables dictionaries.
+    :param input_dict: Input dictionary containing name and id pairs.
+    :param key_as_variable: Default false. If true formats the key as a lowercase with underscores.
+    :param as_json: Default false. If true returns as formatted json.
+    :return: key_value
+    """
+
+    def format_key(key):
+        """Helper function to format the key as lowercase with underscores for spaces."""
+        return key.lower().replace(" ", "_") if key_as_variable else key
+
+    key_value_dict = {
+        format_key(val["name"]): int(val["id"]) if str(val["id"]).isdigit() else val["id"]
+        for val in input_dict
+    }
+
+    if as_json:
+        import json
+        return json.dumps(key_value_dict, indent=4)
+    else:
+        return key_value_dict
+
+if __name__ == "__main__":
+    jira = JiraAPI()
+    input_variable = 'This is a test issue.'
+    response = jira.issue_add_comment(issue_id=10004,comment='test comment')
+    print(response)
+    #print(f"id: {response.id}; key: {response.key}; info:{response.issue_info}; url: {response.issue_url}")

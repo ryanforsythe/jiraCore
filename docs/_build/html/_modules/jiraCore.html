@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="../">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>jiraCore &#8212; jiraCore 1 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=5ecbeea2" />
+    <link rel="stylesheet" type="text/css" href="../_static/basic.css?v=b08954a9" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css?v=27fed22d" />
+    <script src="../_static/documentation_options.js?v=29a6c3e3"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <h1>Source code for jiraCore</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">requests</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">jmespath</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jq</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">requests.auth</span><span class="w"> </span><span class="kn">import</span> <span class="n">HTTPBasicAuth</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">namedtuple</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">mimetypes</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pathlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">loguru</span><span class="w"> </span><span class="kn">import</span> <span class="n">logger</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">jiraVariables</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">jvars</span>
+
+
+<div class="viewcode-block" id="JiraAPI">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">JiraAPI</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Handles interactions with the Jira API for project, issue, and user management.</span>
+
+<span class="sd">    This class provides methods to authenticate, manage projects, users, and issues in</span>
+<span class="sd">    Jira by leveraging the Jira REST API. It includes functionality for project retrieval,</span>
+<span class="sd">    issue creation, user information queries, and search operations.</span>
+
+<span class="sd">    :ivar jvars: Instance of JiraVariables providing default configurations.</span>
+<span class="sd">    :type jvars: JiraVariables</span>
+<span class="sd">    :ivar base_url: The base URL of the Jira instance used in requests.</span>
+<span class="sd">    :type base_url: str</span>
+<span class="sd">    :ivar headers: HTTP headers used for API requests, including content type and</span>
+<span class="sd">        additional authentication headers when authenticated.</span>
+<span class="sd">    :type headers: dict</span>
+<span class="sd">    :ivar default_issue_type_id: Default type ID for creating Jira issues.</span>
+<span class="sd">    :type default_issue_type_id: str</span>
+<span class="sd">    :ivar default_priority_id: Default priority ID for creating Jira issues.</span>
+<span class="sd">    :type default_priority_id: str</span>
+<span class="sd">    :ivar default_project_key: The project key used if no specific key is provided.</span>
+<span class="sd">    :type default_project_key: str</span>
+<span class="sd">    :ivar _auth: Holds the authentication object using basic authentication.</span>
+<span class="sd">    :type _auth: HTTPBasicAuth</span>
+<span class="sd">    :ivar project_info: Stores metadata of the Jira project after retrieval.</span>
+<span class="sd">    :type project_info: dict</span>
+<span class="sd">    :ivar project_id: ID of the currently targeted Jira project.</span>
+<span class="sd">    :type project_id: str</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project_key</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Constructor to initialize JiraAPI instance.</span>
+<span class="sd">        :param project_key: Optional. The Jira project key. If not provided, the default project key will be used.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">jvars</span> <span class="o">=</span> <span class="n">jvars</span><span class="o">.</span><span class="n">JiraVariables</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">init_logger</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_url</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">jvars</span><span class="o">.</span><span class="n">base_jira_url</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_auth</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">default_issue_type_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">jvars</span><span class="o">.</span><span class="n">default_issue_type_id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">default_priority_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">jvars</span><span class="o">.</span><span class="n">default_priority_id</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">headers</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">,</span> <span class="s2">&quot;Content-Type&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_auth</span> <span class="o">=</span> <span class="n">HTTPBasicAuth</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">jvars</span><span class="o">.</span><span class="n">jira_user_name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">jvars</span><span class="o">.</span><span class="n">_jira_password</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_authenticated_headers</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">authenticate</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">project_key</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">default_project_key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">jvars</span><span class="o">.</span><span class="n">default_project_key</span>
+        <span class="k">else</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_project_key</span> <span class="o">=</span> <span class="n">project_key</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">project_info</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">default_project_key</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="JiraAPI.init_logger">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.init_logger">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">init_logger</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">LOGGER_LEVEL</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">jvars</span><span class="o">.</span><span class="n">log_level</span>
+        <span class="n">CONSOLE_LEVEL</span> <span class="o">=</span> <span class="s1">&#39;DEBUG&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">logger</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">jvars</span><span class="o">.</span><span class="n">log_location</span><span class="p">,</span> <span class="n">rotation</span><span class="o">=</span><span class="s2">&quot;30 MB&quot;</span><span class="p">,</span> <span class="n">retention</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">enqueue</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="n">LOGGER_LEVEL</span><span class="p">)</span>
+        <span class="n">time_format</span> <span class="o">=</span> <span class="s2">&quot;YYYY-MM-DD HH:mm:ss&quot;</span>
+        <span class="n">console_format</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;&lt;green&gt;</span><span class="se">{{</span><span class="s2">time:</span><span class="si">{</span><span class="n">time_format</span><span class="si">}</span><span class="se">}}</span><span class="s2">&lt;/green&gt; | &lt;level&gt;</span><span class="se">{{</span><span class="s2">level: &lt;8</span><span class="se">}}</span><span class="s2">&lt;/level&gt; | </span><span class="se">{{</span><span class="s2">name</span><span class="se">}}</span><span class="s2">:</span><span class="se">{{</span><span class="s2">function</span><span class="se">}}</span><span class="s2">:</span><span class="se">{{</span><span class="s2">line</span><span class="se">}}</span><span class="s2"> - </span><span class="se">{{</span><span class="s2">message</span><span class="se">}}</span><span class="s2">&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">sink</span><span class="o">=</span><span class="n">sys</span><span class="o">.</span><span class="n">stdout</span><span class="p">,</span>
+                   <span class="n">level</span><span class="o">=</span><span class="n">CONSOLE_LEVEL</span><span class="p">,</span>
+                   <span class="nb">format</span><span class="o">=</span><span class="n">console_format</span><span class="p">,</span>
+                   <span class="n">colorize</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                   <span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_authenticated_headers</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Update headers with additional authentication information.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">[</span><span class="s2">&quot;X-ExperimentalAPI&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;opt-in&quot;</span>
+
+<div class="viewcode-block" id="JiraAPI.authenticate">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.authenticate">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Authenticate the user by making a test API call.</span>
+<span class="sd">        :return: Tuple containing the status code and headers with authentication info</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/myself&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Authentication: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">user_info</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">user_account_id</span> <span class="o">=</span> <span class="n">user_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;accountId&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">14.1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Authentication failed: </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">errh</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">14</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Authentication failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span></div>
+
+        
+<div class="viewcode-block" id="JiraAPI.project_info">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.project_info">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">project_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">project_key</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Retrieve details for a Jira project.</span>
+<span class="sd">        :param project_key: Project key</span>
+<span class="sd">        :return: Project information</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/project/</span><span class="si">{</span><span class="n">project_key</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">project_info</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">project_id</span> <span class="o">=</span> <span class="n">jq</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s1">&#39;id&#39;</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">project_info</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Project Key: </span><span class="si">{</span><span class="n">project_key</span><span class="si">}</span><span class="s2">; Status Code: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Result: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project_info</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">16.1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error retrieving project info. Project Key: </span><span class="si">{</span><span class="n">project_key</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">errh</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">project_id</span> <span class="o">=</span> <span class="s1">&#39;-1&#39;</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">16</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error retrieving project info. Project Key: </span><span class="si">{</span><span class="n">project_key</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.user_info">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.user_info">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">user_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">account_id</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get information related to a user.</span>
+<span class="sd">        :param account_id: Jira account ID</span>
+<span class="sd">        :return: Named tuple with user info</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">user_info</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s2">&quot;user_info&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;status_code&quot;</span><span class="p">,</span> <span class="s2">&quot;jira_user_dict&quot;</span><span class="p">,</span> <span class="s2">&quot;jira_user_found&quot;</span><span class="p">,</span> <span class="s2">&quot;jira_user_email&quot;</span><span class="p">,</span>
+                                             <span class="s2">&quot;jira_user_display_name&quot;</span><span class="p">,</span> <span class="s2">&quot;jira_user_active&quot;</span><span class="p">])</span>
+        <span class="n">query</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;accountId&#39;</span><span class="p">:</span> <span class="n">account_id</span><span class="p">}</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/user&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">query</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="n">user_data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">user_data</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Account ID: </span><span class="si">{</span><span class="n">account_id</span><span class="si">}</span><span class="s2">; Status Code: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Result: </span><span class="si">{</span><span class="n">user_data</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">user_info</span><span class="p">(</span>
+                    <span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span> <span class="n">user_data</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="n">user_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;emailAddress&quot;</span><span class="p">),</span> <span class="n">user_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;displayName&quot;</span><span class="p">),</span> <span class="n">user_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;active&quot;</span><span class="p">)</span>
+                <span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;User not found. Account ID: </span><span class="si">{</span><span class="n">account_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">user_info</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span> <span class="p">{},</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">17.1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error retrieving user info. Account ID: </span><span class="si">{</span><span class="n">account_id</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">errh</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">17</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error retrieving user info. Account ID: </span><span class="si">{</span><span class="n">account_id</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">user_info</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="p">{},</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.user_by_email">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.user_by_email">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">user_by_email</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">email_address</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get information related to a user by passing the email address.</span>
+<span class="sd">        :param email_address: Jira email address. Example: &lt;EMAIL&gt;</span>
+<span class="sd">        :return: Namedtuple user_info(status_code, jira_user_dict, jira_user_found)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">user_info</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s2">&quot;user_info&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;status_code&quot;</span><span class="p">,</span> <span class="s2">&quot;jira_user_dict&quot;</span><span class="p">,</span> <span class="s2">&quot;jira_user_found&quot;</span><span class="p">])</span>
+
+        <span class="n">pattern</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s1">&#39;^[a-z0-9]+[\._]?[a-z0-9]+[@]\w+[.]\w+$&#39;</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">IGNORECASE</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">pattern</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">email_address</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">18.1</span>
+            <span class="n">jira_user_found</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+            <span class="n">jira_user_dict</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Invalid email address. Email Address: </span><span class="si">{</span><span class="n">email_address</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">user_info</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="p">{},</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/user/search/?query=</span><span class="si">{</span><span class="n">email_address</span><span class="si">}</span><span class="s1">&#39;</span>
+                <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">)</span>
+                <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+                <span class="n">user_data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Email Address: </span><span class="si">{</span><span class="n">email_address</span><span class="si">}</span><span class="s2">; Status Code: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Result: </span><span class="si">{</span><span class="n">user_data</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">user_data</span><span class="p">:</span>
+                    <span class="n">jira_user_dict</span> <span class="o">=</span> <span class="n">user_data</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                    <span class="n">jira_user_dict</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;avatarUrls&quot;</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="n">user_info</span><span class="p">(</span>
+                        <span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span> <span class="n">jira_user_dict</span><span class="p">,</span> <span class="mi">1</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;User not found. Email Address: </span><span class="si">{</span><span class="n">email_address</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="n">user_info</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span> <span class="p">{},</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+                <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">18.1</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error retrieving user info. Email Address: </span><span class="si">{</span><span class="n">email_address</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">status_code</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">errh</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">18</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error retrieving user info. Email Address: </span><span class="si">{</span><span class="n">email_address</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">user_info</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="p">{},</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.search_issues">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.search_issues">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">search_issues</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">search_query</span><span class="p">,</span> <span class="n">as_dataframe</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Search Jira issues based on a query.</span>
+<span class="sd">        :param search_query: Jira search query (JQL)</span>
+<span class="sd">        :param as_dataframe: Return result as pandas DataFrame if True</span>
+<span class="sd">        :return: namedtuple(&quot;issue_search_results&quot;, [&quot;status_code&quot;, &quot;jira_issues&quot;])</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">IssueSearchResult</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s2">&quot;issue_search_results&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;status_code&quot;</span><span class="p">,</span> <span class="s2">&quot;jira_issues&quot;</span><span class="p">])</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/search?jql=</span><span class="si">{</span><span class="n">search_query</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="n">result_dict</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Search query: </span><span class="si">{</span><span class="n">search_query</span><span class="si">}</span><span class="s2">; Result: </span><span class="si">{</span><span class="n">result_dict</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">as_dataframe</span><span class="p">:</span>
+                <span class="n">jira_issues</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">json_normalize</span><span class="p">(</span><span class="n">result_dict</span><span class="p">,</span> <span class="n">record_path</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;issues&#39;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="s1">&#39;_&#39;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">jira_issues</span> <span class="o">=</span> <span class="n">result_dict</span>
+            <span class="k">return</span> <span class="n">IssueSearchResult</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span> <span class="n">jira_issues</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">21.1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error searching for issues. Query: </span><span class="si">{</span><span class="n">search_query</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">errh</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">21</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error searching for issues. Query: </span><span class="si">{</span><span class="n">search_query</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">IssueSearchResult</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="p">[])</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.issue_create">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.issue_create">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">issue_create</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">summary</span><span class="p">,</span> <span class="n">project_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">issue_type_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">description</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">assignee</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">priority</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create a Jira issue.</span>
+<span class="sd">        :param project_id: Project ID</span>
+<span class="sd">        :param summary: Issue summary</span>
+<span class="sd">        :param issue_type_id: Issue type ID (default: 12412)</span>
+<span class="sd">        :param description: Issue description</span>
+<span class="sd">        :param assignee: Assignee account ID, optional</span>
+<span class="sd">        :param priority: Priority ID, optional (default: 10100)</span>
+<span class="sd">        :return: namedtuple(&quot;issue&quot;, [&quot;status_code&quot;, &quot;issue_info&quot;,&quot;id&quot;, &quot;key&quot;, &quot;issue_url&quot;])</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">IssueInfo</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s2">&quot;issue&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;status_code&quot;</span><span class="p">,</span> <span class="s2">&quot;issue_info&quot;</span><span class="p">,</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;key&quot;</span><span class="p">,</span> <span class="s2">&quot;issue_url&quot;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">project_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span> <span class="n">project_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">project_id</span>
+        <span class="k">if</span> <span class="n">issue_type_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span> <span class="n">issue_type_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_issue_type_id</span>
+        <span class="k">if</span> <span class="n">description</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span> <span class="n">description</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">assignee</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span> <span class="n">assignee</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">user_account_id</span>
+        <span class="k">if</span> <span class="n">priority</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span> <span class="n">priority</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">default_priority_id</span>
+        <span class="n">priority</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;&quot;</span><span class="si">{</span><span class="n">priority</span><span class="si">}</span><span class="s1">&quot;&#39;</span><span class="p">)</span>
+        <span class="n">input_json</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;assignee&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;accountId&quot;</span><span class="p">:</span> <span class="n">assignee</span><span class="p">},</span>
+                <span class="s2">&quot;description&quot;</span><span class="p">:</span> <span class="p">{</span>
+                    <span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="p">[</span>
+                        <span class="p">{</span><span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="p">[{</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">description</span><span class="p">,</span> <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;text&quot;</span><span class="p">}],</span> <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;paragraph&quot;</span><span class="p">}</span>
+                    <span class="p">],</span>
+                    <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;doc&quot;</span><span class="p">,</span>
+                    <span class="s2">&quot;version&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                <span class="p">},</span>
+                <span class="s2">&quot;issuetype&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">issue_type_id</span><span class="p">},</span>
+                <span class="c1">#&quot;priority&quot;: {&quot;id&quot;: priority},</span>
+                <span class="s2">&quot;project&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">project_id</span><span class="p">},</span>
+                <span class="s2">&quot;summary&quot;</span><span class="p">:</span> <span class="n">summary</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">input_json</span><span class="p">)</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/issue&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">payload</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="n">issue_info</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Issue created: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Project: </span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s2">; Summary: </span><span class="si">{</span><span class="n">summary</span><span class="si">}</span><span class="s2">; Issue Type: </span><span class="si">{</span><span class="n">issue_type_id</span><span class="si">}</span><span class="s2">; Priority: </span><span class="si">{</span><span class="n">priority</span><span class="si">}</span><span class="s2">; Assignee: </span><span class="si">{</span><span class="n">assignee</span><span class="si">}</span><span class="s2">; &quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">IssueInfo</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span> <span class="n">issue_info</span><span class="p">,</span> <span class="n">issue_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;id&quot;</span><span class="p">),</span> <span class="n">issue_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;key&quot;</span><span class="p">),</span> <span class="n">issue_info</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;self&quot;</span><span class="p">))</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">35.1</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error creating issue; Project: </span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s2">; Summary: </span><span class="si">{</span><span class="n">summary</span><span class="si">}</span><span class="s2">; Issue Type: </span><span class="si">{</span><span class="n">issue_type_id</span><span class="si">}</span><span class="s2">; Priority: </span><span class="si">{</span><span class="n">priority</span><span class="si">}</span><span class="s2">; Assignee: </span><span class="si">{</span><span class="n">assignee</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">IssueInfo</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span> <span class="p">[],</span> <span class="o">-</span><span class="mi">1</span> <span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">35</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error creating issue; Project: </span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s2">; Summary: </span><span class="si">{</span><span class="n">summary</span><span class="si">}</span><span class="s2">; Issue Type: </span><span class="si">{</span><span class="n">issue_type_id</span><span class="si">}</span><span class="s2">; Priority: </span><span class="si">{</span><span class="n">priority</span><span class="si">}</span><span class="s2">; Assignee: </span><span class="si">{</span><span class="n">assignee</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">IssueInfo</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span> <span class="p">[],</span> <span class="o">-</span><span class="mi">1</span> <span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.issue_transition">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.issue_transition">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">issue_transition</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">issue_id</span><span class="p">,</span> <span class="n">transition_id</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Transition a Jira issue.</span>
+<span class="sd">        :param issue_id: Jira issue ID</span>
+<span class="sd">        :param transition_id: Transition ID</span>
+<span class="sd">        :return: Status code. Error returns status code -37.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">&quot;transition&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="n">transition_id</span><span class="p">}})</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/issue/</span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s1">/transitions&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">payload</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Issue transitioned: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; Transition ID: </span><span class="si">{</span><span class="n">transition_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">37.1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error transitioning issue. Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; Transition ID: </span><span class="si">{</span><span class="n">transition_id</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">37</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error transitioning issue. Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; Transition ID: </span><span class="si">{</span><span class="n">transition_id</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.issue_field_update">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.issue_field_update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">issue_field_update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">issue_id</span><span class="p">,</span> <span class="n">field_update_dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Update a field in a Jira issue.</span>
+<span class="sd">        :param issue_id: Jira issue ID</span>
+<span class="sd">        :param field_update_dict: Field dictionary.</span>
+<span class="sd">        :return: Status code</span>
+<span class="sd">        :Example: field_update_data = {&quot;customfield_14064&quot;: [{&quot;accountId&quot;: &quot;712020:d4f13f91-ed7f-493d-8fef-4029b44eb7cb&quot;},{&quot;accountId&quot;: &quot;5a4e734573cadb08a03ed16c&quot;}]}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">&quot;fields&quot;</span><span class="p">:</span> <span class="n">field_update_dict</span><span class="p">})</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/issue/</span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">payload</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Issue field updated: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">35.1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error updating issue. Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; Field Data: </span><span class="si">{</span><span class="n">field_update_dict</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">35</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error updating issue. Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; Field Data: </span><span class="si">{</span><span class="n">field_update_dict</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.issue_detail">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.issue_detail">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">issue_detail</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">issue_id</span><span class="p">,</span> <span class="n">include_forms</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Retrieve the detail for a Jira issue. Also includes the issue forms if include_forms=True.</span>
+<span class="sd">        :param issue_id: Jira issue ID</span>
+<span class="sd">        :param include_forms: True/False. Default False. Option to include forms.</span>
+<span class="sd">        :return: Namedtuple. issue_detail_info(status_code, jira_issue_info_dict[reporter_account_id, reporter_email_address, issue_status_id, issue_status_name,</span>
+<span class="sd">                                change_start_datetime, assignee_id, assignee_email_address], jira_issue_dict, question_response_df)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">issue_detail_info</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s2">&quot;issue_detail_info&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;status_code&quot;</span><span class="p">,</span> <span class="s2">&quot;jira_issue_info_dict&quot;</span><span class="p">,</span> <span class="s2">&quot;jira_issue_dict&quot;</span><span class="p">,</span>
+                                                             <span class="s2">&quot;question_response_df&quot;</span><span class="p">])</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/issue/</span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s1">?properties=*all&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span>
+            <span class="c1"># jiraIssueDetail_json = json.loads(jiraIssueDetail.text)</span>
+            <span class="c1"># print(jiraIssueForms.text)</span>
+            <span class="n">jiraIssueFormsText</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">text</span>
+            <span class="c1"># print(jiraIssueFormsText)</span>
+            <span class="n">jira_issue_dict</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+            <span class="n">reporter_account_id</span> <span class="o">=</span> <span class="n">jq</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s1">&#39;fields.reporter.accountId&#39;</span><span class="p">,</span> <span class="n">jira_issue_dict</span><span class="p">)</span>
+            <span class="n">reporter_email_address</span> <span class="o">=</span> <span class="n">jq</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s1">&#39;fields.reporter.emailAddress&#39;</span><span class="p">,</span> <span class="n">jira_issue_dict</span><span class="p">)</span>
+            <span class="n">issue_status_id</span> <span class="o">=</span> <span class="n">jq</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s1">&#39;fields.status.id&#39;</span><span class="p">,</span> <span class="n">jira_issue_dict</span><span class="p">)</span>
+            <span class="n">issue_status_name</span> <span class="o">=</span> <span class="n">jq</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s1">&#39;fields.status.name&#39;</span><span class="p">,</span> <span class="n">jira_issue_dict</span><span class="p">)</span>
+            <span class="n">change_start_datetime</span> <span class="o">=</span> <span class="n">jq</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s1">&#39;fields.customfield_14069&#39;</span><span class="p">,</span> <span class="n">jira_issue_dict</span><span class="p">)</span>
+            <span class="n">assignee_id</span> <span class="o">=</span> <span class="n">jq</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s2">&quot;fields.assignee.accountId&quot;</span><span class="p">,</span> <span class="n">jira_issue_dict</span><span class="p">)</span>
+            <span class="n">assignee_email_address</span> <span class="o">=</span> <span class="n">jq</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s2">&quot;fields.assignee.emailAddress&quot;</span><span class="p">,</span> <span class="n">jira_issue_dict</span><span class="p">)</span>
+            <span class="n">jira_issue_info_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;reporter_account_id&quot;</span><span class="p">:</span> <span class="n">reporter_account_id</span><span class="p">,</span>
+                                    <span class="s2">&quot;reporter_email_address&quot;</span><span class="p">:</span> <span class="n">reporter_email_address</span><span class="p">,</span>
+                                    <span class="s2">&quot;issue_status_id&quot;</span><span class="p">:</span> <span class="n">issue_status_id</span><span class="p">,</span>
+                                    <span class="s2">&quot;issue_status_name&quot;</span><span class="p">:</span> <span class="n">issue_status_name</span><span class="p">,</span>
+                                    <span class="s2">&quot;change_start_datetime&quot;</span><span class="p">:</span> <span class="n">change_start_datetime</span><span class="p">,</span>
+                                    <span class="s2">&quot;assignee_id&quot;</span><span class="p">:</span> <span class="n">assignee_id</span><span class="p">,</span>
+                                    <span class="s2">&quot;assignee_email_address&quot;</span><span class="p">:</span> <span class="n">assignee_email_address</span><span class="p">,</span> <span class="p">}</span>
+
+            <span class="k">if</span> <span class="n">include_forms</span> <span class="o">==</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="n">jira_issue_properties</span> <span class="o">=</span> <span class="n">jira_issue_dict</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;properties&#39;</span><span class="p">)</span>
+                <span class="c1"># the proforma.form.i value changes as a unique identifier</span>
+                <span class="n">jira_issue_forms_element</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">jira_issue_properties</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span>
+                                            <span class="n">k</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;proforma.forms.i&#39;</span><span class="p">)}</span>
+                <span class="n">jira_issue_form_key</span><span class="p">,</span> <span class="n">jira_issue_forms</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">jira_issue_forms_element</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span>
+                <span class="n">questions_list</span> <span class="o">=</span> <span class="n">jq</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s1">&#39;design.questions&#39;</span><span class="p">,</span> <span class="n">jira_issue_forms</span><span class="p">)</span>
+                <span class="c1"># print(questions_list)</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="c1"># Loop through question_list</span>
+                <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">questions_list</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="c1"># Append a dict containing the required information to the list</span>
+                    <span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">{</span><span class="s1">&#39;questionID&#39;</span><span class="p">:</span> <span class="n">key</span><span class="p">,</span> <span class="s1">&#39;jiraField&#39;</span><span class="p">:</span> <span class="n">val</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;jiraField&#39;</span><span class="p">),</span> <span class="s1">&#39;type&#39;</span><span class="p">:</span> <span class="n">val</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;type&#39;</span><span class="p">),</span>
+                         <span class="s1">&#39;label&#39;</span><span class="p">:</span> <span class="n">val</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;label&#39;</span><span class="p">),</span> <span class="s1">&#39;questionKey&#39;</span><span class="p">:</span> <span class="n">val</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;questionKey&#39;</span><span class="p">),</span>
+                         <span class="s1">&#39;choices&#39;</span><span class="p">:</span> <span class="n">val</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;choices&#39;</span><span class="p">)})</span>
+                <span class="c1"># print(f&quot;{questions_list}&quot;)</span>
+                <span class="c1"># Convert the list of dicts to a DataFrame</span>
+                <span class="n">df_questions</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+
+                <span class="n">responses_list</span> <span class="o">=</span> <span class="n">jq</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s1">&#39;state.answers&#39;</span><span class="p">,</span> <span class="n">jira_issue_forms</span><span class="p">)</span>
+                <span class="c1"># print(responses_list)</span>
+                <span class="n">responses_list_fmt</span> <span class="o">=</span> <span class="p">[]</span>
+
+                <span class="c1"># Loop through question_list</span>
+                <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">responses_list</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="c1"># Append a dict containing the required information to the list</span>
+                    <span class="n">responses_list_fmt</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="p">{</span><span class="s1">&#39;questionID&#39;</span><span class="p">:</span> <span class="n">key</span><span class="p">,</span> <span class="s1">&#39;textField&#39;</span><span class="p">:</span> <span class="n">val</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;text&#39;</span><span class="p">),</span> <span class="s1">&#39;users&#39;</span><span class="p">:</span> <span class="n">val</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;users&#39;</span><span class="p">),</span>
+                         <span class="s1">&#39;label&#39;</span><span class="p">:</span> <span class="n">val</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;label&#39;</span><span class="p">),</span> <span class="s1">&#39;choices&#39;</span><span class="p">:</span> <span class="n">val</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;choices&#39;</span><span class="p">),</span> <span class="s1">&#39;date&#39;</span><span class="p">:</span> <span class="n">val</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;date&#39;</span><span class="p">),</span>
+                         <span class="s1">&#39;time&#39;</span><span class="p">:</span> <span class="n">val</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;time&#39;</span><span class="p">)})</span>
+
+                <span class="c1"># print(responses_list)</span>
+                <span class="c1"># Convert the list of dicts to a DataFrame</span>
+                <span class="c1"># print(f&quot;responses_list_fmt: {responses_list_fmt}&quot;)</span>
+                <span class="n">df_responses</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">responses_list_fmt</span><span class="p">)</span>
+                <span class="c1"># combine the dataframes df_responses and df_questions</span>
+                <span class="n">question_response_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">df_responses</span><span class="p">,</span> <span class="n">df_questions</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="s1">&#39;questionID&#39;</span><span class="p">)</span>
+                <span class="n">question_response_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="s2">&quot;type_name&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+                <span class="n">question_response_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="s2">&quot;value_consolidated&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+                <span class="c1"># print(f&quot;question_response_df: {question_response_df.to_json(orient=&#39;records&#39;)}&quot;)</span>
+                <span class="k">for</span> <span class="n">ind</span> <span class="ow">in</span> <span class="n">question_response_df</span><span class="o">.</span><span class="n">index</span><span class="p">:</span>
+                    <span class="c1"># print(f&quot;index:{ind}&quot;)</span>
+                    <span class="n">response_type</span> <span class="o">=</span> <span class="n">question_response_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ind</span><span class="p">,</span> <span class="s1">&#39;type&#39;</span><span class="p">]</span>
+                    <span class="c1"># print(f&quot;response_type:{response_type}&quot;)</span>
+                    <span class="n">response_type_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">response_type_ref</span><span class="p">(</span><span class="n">response_type</span><span class="p">)</span>
+                    <span class="n">response_type_col</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">response_type_col_ref</span><span class="p">(</span><span class="n">response_type</span><span class="p">)</span>
+                    <span class="c1"># print(f&quot;response_type_col:{response_type_col}; response_type_name:{response_type_name}&quot;)</span>
+                    <span class="n">question_response_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ind</span><span class="p">,</span> <span class="s1">&#39;type_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">response_type_name</span>
+                    <span class="k">if</span> <span class="n">response_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;dt&#39;</span><span class="p">,</span> <span class="s1">&#39;cs&#39;</span><span class="p">,</span> <span class="s1">&#39;cd&#39;</span><span class="p">,</span> <span class="s1">&#39;cl&#39;</span><span class="p">,</span> <span class="s1">&#39;cm&#39;</span><span class="p">):</span>
+                        <span class="n">question_response_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ind</span><span class="p">,</span> <span class="s1">&#39;value_consolidated&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span>
+                            <span class="n">question_response_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ind</span><span class="p">,</span> <span class="n">response_type_col</span><span class="p">])</span>
+                    <span class="k">elif</span> <span class="n">response_type</span> <span class="o">==</span> <span class="s1">&#39;dt&#39;</span><span class="p">:</span>
+                        <span class="n">question_response_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span>
+                            <span class="n">ind</span><span class="p">,</span> <span class="s1">&#39;value_consolidated&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">question_response_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ind</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;date&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">H</span><span class="si">{</span><span class="n">question_response_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ind</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;time&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+                    <span class="k">elif</span> <span class="n">response_type</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;cs&#39;</span><span class="p">,</span> <span class="s1">&#39;cd&#39;</span><span class="p">,</span> <span class="s1">&#39;cl&#39;</span><span class="p">,</span> <span class="s1">&#39;cm&#39;</span><span class="p">):</span>
+                        <span class="n">choices_responses</span> <span class="o">=</span> <span class="n">question_response_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ind</span><span class="p">,</span> <span class="s1">&#39;choices_x&#39;</span><span class="p">]</span>
+                        <span class="n">choices_options</span> <span class="o">=</span> <span class="n">question_response_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ind</span><span class="p">,</span> <span class="s1">&#39;choices_y&#39;</span><span class="p">]</span>
+                        <span class="c1"># print(f&quot;choice_responses:{choices_responses}; choices_options:{choices_options}&quot;)</span>
+                        <span class="k">if</span> <span class="n">choices_options</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="n">selected_choices</span> <span class="o">=</span> <span class="p">[{</span><span class="s1">&#39;choice_id&#39;</span><span class="p">:</span> <span class="n">option</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">],</span> <span class="s1">&#39;value&#39;</span><span class="p">:</span> <span class="n">option</span><span class="p">[</span><span class="s1">&#39;label&#39;</span><span class="p">]}</span> <span class="k">for</span> <span class="n">option</span> <span class="ow">in</span>
+                                                <span class="n">choices_options</span> <span class="k">if</span>
+                                                <span class="n">option</span><span class="p">[</span><span class="s1">&#39;id&#39;</span><span class="p">]</span> <span class="ow">in</span> <span class="n">choices_responses</span><span class="p">]</span>
+                            <span class="n">selected_choices_list</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">selected_choices</span><span class="p">)</span>
+                            <span class="n">question_response_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ind</span><span class="p">,</span> <span class="s1">&#39;value_consolidated&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">selected_choices_list</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">question_response_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ind</span><span class="p">,</span> <span class="s1">&#39;value_consolidated&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="c1"># print(f&quot;question_response_df: {question_response_df}&quot;)</span>
+                <span class="k">return</span> <span class="n">issue_detail_info</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="n">jira_issue_info_dict</span><span class="p">,</span> <span class="n">jira_issue_dict</span><span class="p">,</span> <span class="n">question_response_df</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">question_response_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Issue detail. Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Result: </span><span class="si">{</span><span class="n">jira_issue_dict</span><span class="si">}</span><span class="s2">; Detail: </span><span class="si">{</span><span class="n">jira_issue_info_dict</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">issue_detail_info</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="n">jira_issue_info_dict</span><span class="p">,</span> <span class="n">jira_issue_dict</span><span class="p">,</span> <span class="n">question_response_df</span><span class="p">)</span>
+            <span class="c1"># print(question_response_df)</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">30.1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code:</span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error retrieving Issue Detail. Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2"> message:</span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">question_response_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">issue_detail_info</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="p">[],</span> <span class="p">{},</span> <span class="n">question_response_df</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">30</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code:</span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error retrieving Issue Detail. Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2"> message:</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">question_response_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">issue_detail_info</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="p">[],</span> <span class="p">{},</span> <span class="n">question_response_df</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.issue_add_comment">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.issue_add_comment">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">issue_add_comment</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">issue_id</span><span class="p">,</span> <span class="n">comment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Add a comment to an issue.</span>
+<span class="sd">        :param issue_id: Jira issue ID</span>
+<span class="sd">        :param comment: Comment text</span>
+<span class="sd">        :return: Status code</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">&quot;body&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="p">[{</span><span class="s2">&quot;content&quot;</span><span class="p">:</span> <span class="p">[{</span><span class="s2">&quot;text&quot;</span><span class="p">:</span> <span class="n">comment</span><span class="p">,</span> <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;text&quot;</span><span class="p">}],</span> <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;paragraph&quot;</span><span class="p">}],</span>
+                            <span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;doc&quot;</span><span class="p">,</span> <span class="s2">&quot;version&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}})</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/issue/</span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s1">/comment&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">payload</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Added comment to issue: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; Comment: </span><span class="si">{</span><span class="n">comment</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">33.1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error adding comment to issue. Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; Comment: </span><span class="si">{</span><span class="n">comment</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">33</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error adding comment to issue. Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; Comment: </span><span class="si">{</span><span class="n">comment</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.issue_assign">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.issue_assign">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">issue_assign</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">issue_id</span><span class="p">,</span> <span class="n">accountId</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Assign a Jira issue.</span>
+<span class="sd">        :param issue_id: Jira issue id</span>
+<span class="sd">        :param accountId: Jira account id</span>
+<span class="sd">        :return: status_code. Error returns -32</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">&quot;accountId&quot;</span><span class="p">:</span> <span class="n">accountId</span><span class="p">})</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/issue/</span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s1">/assignee&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">payload</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Issue assigned: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; Assignee: </span><span class="si">{</span><span class="n">accountId</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">34.1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error assigning issue. Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; Assignee: </span><span class="si">{</span><span class="n">accountId</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">34</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error assigning issue. Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; Assignee: </span><span class="si">{</span><span class="n">accountId</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.issue_add_attachment">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.issue_add_attachment">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">issue_add_attachment</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">issue_id</span><span class="p">,</span> <span class="n">file_attachment</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Adds attachment to issue.</span>
+<span class="sd">        :param issue_id: Jira issue id</span>
+<span class="sd">        :param file_attachment: Full path to file attachment.</span>
+<span class="sd">        :return: status_code. Error returns -33</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">headers_jira_auth_upload</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;Accept&quot;</span><span class="p">:</span> <span class="s2">&quot;application/json&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;X-Atlassian-Token&quot;</span><span class="p">:</span> <span class="s2">&quot;no-check&quot;</span>
+        <span class="p">}</span>
+        <span class="n">application_type</span> <span class="o">=</span> <span class="n">get_file_application_type</span><span class="p">(</span><span class="n">file_attachment</span><span class="o">=</span><span class="n">file_attachment</span><span class="p">)</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;file&quot;</span><span class="p">:</span> <span class="p">(</span><span class="n">file_attachment</span><span class="p">,</span> <span class="nb">open</span><span class="p">(</span><span class="n">file_attachment</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">),</span> <span class="n">application_type</span><span class="p">)}</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/issue/</span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s1">/attachments&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">,</span> <span class="n">files</span><span class="o">=</span><span class="n">payload</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Issue attachment added: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; Attachment: </span><span class="si">{</span><span class="n">file_attachment</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">33.1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error adding attachment to issue. Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; Attachment: </span><span class="si">{</span><span class="n">file_attachment</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">33</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error adding attachment to issue. Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; Attachment: </span><span class="si">{</span><span class="n">file_attachment</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.issue_changelog">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.issue_changelog">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">issue_changelog</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">issue_id</span><span class="p">,</span> <span class="n">max_results</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Retrieve changelog for a Jira issue.</span>
+<span class="sd">        :param issue_id: Jira issue ID</span>
+<span class="sd">        :param max_results: Defaults to 1000. The number of results to retrieve.</span>
+<span class="sd">        :return: changelog_dict {status_code, changelog_entries, status_exception_comment}</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">changelog_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;status_code&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;changelog_entries&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;status_exception_comment&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">}</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/issue/</span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s1">/changelog?maxResults=</span><span class="si">{</span><span class="n">max_results</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="n">changelog_entries</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+            <span class="n">changelog_dict</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s1">&#39;status_code&#39;</span><span class="p">:</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span> <span class="s1">&#39;changelog_entries&#39;</span><span class="p">:</span> <span class="n">changelog_entries</span><span class="p">})</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Changelog. Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; Status Code: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">changelog_dict</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">36.1</span>
+            <span class="n">status_exception_comment</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Error retrieving changelog. </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">status_exception_comment</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">changelog_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="p">{</span><span class="s2">&quot;status_code&quot;</span><span class="p">:</span> <span class="n">status_code</span><span class="p">,</span> <span class="s2">&quot;status_exception_comment&quot;</span><span class="p">:</span> <span class="n">status_exception_comment</span><span class="p">})</span>
+            <span class="k">return</span> <span class="n">changelog_dict</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">36</span>
+            <span class="n">status_exception_comment</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Error retrieving changelog. </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Issue ID: </span><span class="si">{</span><span class="n">issue_id</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">status_exception_comment</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">changelog_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="p">{</span><span class="s2">&quot;status_code&quot;</span><span class="p">:</span> <span class="n">status_code</span><span class="p">,</span> <span class="s2">&quot;status_exception_comment&quot;</span><span class="p">:</span> <span class="n">status_exception_comment</span><span class="p">})</span>
+            <span class="k">return</span> <span class="n">changelog_dict</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.issue_types_user">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.issue_types_user">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">issue_types_user</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">as_dataframe</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Retrieve issue types for the logged in user.</span>
+<span class="sd">        :param as_dataframe: Return result as pandas DataFrame if True</span>
+<span class="sd">        :return: Named Tuple. IssueTypes(status_code, issue_types)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">IssueTypes</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s2">&quot;issue_types&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;status_code&quot;</span><span class="p">,</span> <span class="s2">&quot;issue_types&quot;</span><span class="p">])</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/issuetype&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="n">issue_types_dict</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;User Issue Types. Status Code: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">as_dataframe</span><span class="p">:</span>
+                <span class="n">issue_types</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">json_normalize</span><span class="p">(</span><span class="n">issue_types_dict</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="s1">&#39;_&#39;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">issue_types</span> <span class="o">=</span> <span class="n">issue_types_dict</span>
+            <span class="k">return</span> <span class="n">IssueTypes</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span> <span class="n">issue_types</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">61.1</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error retrieving user issue types; </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">IssueTypes</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="p">[])</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">61</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error retrieving user issue types; </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">IssueTypes</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="p">[])</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.issue_statuses">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.issue_statuses">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">issue_statuses</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">projectLevel</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">as_dataframe</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Retrieve issue statuses. By default restricted to the project level.</span>
+<span class="sd">        :param projectLevel: Default True. If false retrieves all statuses.</span>
+<span class="sd">        :param as_dataframe: Return result as pandas DataFrame if True</span>
+<span class="sd">        :return: Named Tuple. IssueStatuses(status_code, issue_statuses)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">IssueStatuses</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s2">&quot;issue_statuses&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;status_code&quot;</span><span class="p">,</span> <span class="s2">&quot;issue_statuses&quot;</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">projectLevel</span><span class="p">:</span>
+            <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/statuses/search?projectId=</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">project_id</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/statuses/search&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="n">issue_statuses_dict</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Issue Statuses. Status Code: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">as_dataframe</span><span class="p">:</span>
+                <span class="n">issue_statuses</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">json_normalize</span><span class="p">(</span><span class="n">issue_statuses_dict</span><span class="p">,</span> <span class="n">errors</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="s1">&#39;_&#39;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">issue_statuses</span> <span class="o">=</span> <span class="n">issue_statuses_dict</span>
+            <span class="k">return</span> <span class="n">IssueStatuses</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span> <span class="n">issue_statuses</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">71.1</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error retrieving user issue statuses; </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">IssueStatuses</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="p">[])</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">71</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error retrieving user issue statuses; </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">IssueStatuses</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="p">[])</span></div>
+
+
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Experimental as of 03/14/2025</span>
+<span class="sd">    def project_issue_types(self, project_id=None, as_dataframe=False) -&gt; object:</span>
+
+<span class="sd">        IssueTypes = namedtuple(&quot;issue_types&quot;, [&quot;status_code&quot;, &quot;issue_types&quot;])</span>
+<span class="sd">        if project_id is None: project_id = self.project_id</span>
+<span class="sd">        #url = f&#39;{self.base_url}api/3/issuetype/project&#39;</span>
+<span class="sd">        url = f&#39;{self.base_url}api/3/issuetype&#39;</span>
+<span class="sd">        #query_json = {&quot;projectId&quot;: project_id }</span>
+<span class="sd">        #query = json.dumps(query_json)</span>
+<span class="sd">        query = {&#39;projectId&#39;: &#39;{10000}&#39;}</span>
+<span class="sd">        try:</span>
+<span class="sd">            #response = requests.get(url, headers=self.headers, auth=self._auth, params=query)</span>
+<span class="sd">            response = requests.get(url, headers=self.headers, auth=self._auth)</span>
+<span class="sd">            response.raise_for_status()</span>
+<span class="sd">            issue_types_dict = json.loads(response.text)</span>
+<span class="sd">            self.logger.debug(f&quot;Project Issue Types. Issue ID: {project_id}; Status Code: {response.status_code}&quot;)</span>
+<span class="sd">            if as_dataframe:</span>
+<span class="sd">                jira_issues = pd.json_normalize(issue_types_dict, record_path=[&#39;issues&#39;], errors=&#39;ignore&#39;, sep=&#39;_&#39;)</span>
+<span class="sd">            else:</span>
+<span class="sd">                issue_types = issue_types_dict</span>
+<span class="sd">            return IssueTypes(response.status_code, issue_types)</span>
+<span class="sd">        except requests.exceptions.HTTPError as errh:</span>
+<span class="sd">            status_code = -36</span>
+<span class="sd">            logger.error(f&quot;Status Code: {status_code}; Error retrieving project issue types; Project: {project_id}; {errh}; {response.text}&quot;)</span>
+<span class="sd">            return IssueTypes(status_code, [])</span>
+<span class="sd">        except Exception as e:</span>
+<span class="sd">            status_code = -36</span>
+<span class="sd">            logger.error(f&quot;Status Code: {status_code}; Error retrieving project issue types; Project: {project_id}; {e}&quot;)</span>
+<span class="sd">            return IssueTypes(status_code, [])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="JiraAPI.role_add_user">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.role_add_user">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">role_add_user</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">role_id</span><span class="p">,</span> <span class="n">accountId</span><span class="p">,</span> <span class="n">project_id</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Add user to a Jira role.</span>
+<span class="sd">        :param role_id: Jira role id</span>
+<span class="sd">        :param accountId: Jira account id</span>
+<span class="sd">        :param project_id: Optional. Project id. Defaults to self.project_id.</span>
+<span class="sd">        :return: status_code. Error returns -51</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">project_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span> <span class="n">project_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">project_id</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">({</span><span class="s2">&quot;user&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">accountId</span><span class="p">]})</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/project/</span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s1">/role/</span><span class="si">{</span><span class="n">role_id</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">post</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">payload</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Role Add User. Role ID: </span><span class="si">{</span><span class="n">role_id</span><span class="si">}</span><span class="s2">; Account ID: </span><span class="si">{</span><span class="n">accountId</span><span class="si">}</span><span class="s2">; Project: </span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s2">; Status Code: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">51.1</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error adding user to role. Role ID: </span><span class="si">{</span><span class="n">role_id</span><span class="si">}</span><span class="s2">; Account ID: </span><span class="si">{</span><span class="n">accountId</span><span class="si">}</span><span class="s2">; Project: </span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">51</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error adding user to role. Role ID: </span><span class="si">{</span><span class="n">role_id</span><span class="si">}</span><span class="s2">; Account ID: </span><span class="si">{</span><span class="n">accountId</span><span class="si">}</span><span class="s2">; Project: </span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">status_code</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.jira_role_get_users">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.jira_role_get_users">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">jira_role_get_users</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">role_id</span><span class="p">,</span> <span class="n">project_id</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get users associated with Jira role.</span>
+<span class="sd">        :param role_id: Jira role id</span>
+<span class="sd">        :param project_id: Optional. Project id. Defaults to self.project_id.</span>
+<span class="sd">        :return: Namedtuple. role_info(status_code, jiraRole_users_df, jiraRole_dict)</span>
+<span class="sd">        :raises Error code = -50</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">project_id</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span> <span class="n">project_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">project_id</span>
+        <span class="n">role_info</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s2">&quot;role_info&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;status_code&quot;</span><span class="p">,</span> <span class="s2">&quot;jiraRole_users_df&quot;</span><span class="p">,</span> <span class="s2">&quot;jiraRole_dict&quot;</span><span class="p">])</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/project/</span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s1">/role/</span><span class="si">{</span><span class="n">role_id</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="n">jiraRole_dict</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+            <span class="n">jiraRole_users_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">json_normalize</span><span class="p">(</span><span class="n">jiraRole_dict</span><span class="p">,</span> <span class="n">record_path</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;actors&#39;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="s1">&#39;_&#39;</span><span class="p">)</span>
+            <span class="n">jiraRole_users_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[:,</span> <span class="s2">&quot;user_email&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+            <span class="k">for</span> <span class="n">ind</span> <span class="ow">in</span> <span class="n">jiraRole_users_df</span><span class="o">.</span><span class="n">index</span><span class="p">:</span>
+                <span class="n">accountId</span> <span class="o">=</span> <span class="n">jiraRole_users_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ind</span><span class="p">,</span> <span class="s1">&#39;actorUser_accountId&#39;</span><span class="p">]</span>
+                <span class="n">user_info</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_user_info</span><span class="p">(</span><span class="n">accountId</span><span class="o">=</span><span class="n">accountId</span><span class="p">)</span>
+                <span class="n">jiraRole_users_df</span><span class="o">.</span><span class="n">loc</span><span class="p">[</span><span class="n">ind</span><span class="p">,</span> <span class="s2">&quot;user_email&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">user_info</span><span class="o">.</span><span class="n">jira_user_email</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Jira Role Users. Role ID: </span><span class="si">{</span><span class="n">role_id</span><span class="si">}</span><span class="s2">; Project: </span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s2">; Status Code: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">role_info</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="p">,</span> <span class="n">jiraRole_users_df</span><span class="p">,</span> <span class="n">jiraRole_dict</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">50.1</span>
+            <span class="n">jiraRole_dict</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="n">jiraRole_users_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error retrieving Jira Role Users. Role ID: </span><span class="si">{</span><span class="n">role_id</span><span class="si">}</span><span class="s2">; Project: </span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">role_info</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="n">jiraRole_users_df</span><span class="p">,</span> <span class="n">jiraRole_dict</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">50</span>
+            <span class="n">jiraRole_dict</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="n">jiraRole_users_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error retrieving Jira Role Users. Role ID: </span><span class="si">{</span><span class="n">role_id</span><span class="si">}</span><span class="s2">; Project: </span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">role_info</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="n">jiraRole_users_df</span><span class="p">,</span> <span class="n">jiraRole_dict</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.jira_role_info">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.jira_role_info">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">jira_role_info</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">role_id</span><span class="p">,</span> <span class="n">project_id</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">object</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get role information associated with Jira role. Returns role members as a dataframe.</span>
+<span class="sd">        :param role_id: Jira role id</span>
+<span class="sd">        :return: Namedtuple. role_info(status_code, jira_role_members_df)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">role_info</span> <span class="o">=</span> <span class="n">namedtuple</span><span class="p">(</span><span class="s2">&quot;role_info&quot;</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;status_code&quot;</span><span class="p">,</span> <span class="s2">&quot;jira_role_members_df&quot;</span><span class="p">])</span>
+        <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s1">&#39;</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">base_url</span><span class="si">}</span><span class="s1">api/3/project/</span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s1">/role/</span><span class="si">{</span><span class="n">role_id</span><span class="si">}</span><span class="s1">&#39;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">headers</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="p">,</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Role Info: </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">status_code</span><span class="si">}</span><span class="s2">;</span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">jira_role_json</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="p">)</span>
+            <span class="n">jira_role__dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">())</span>
+            <span class="n">jira_role_members_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">json_normalize</span><span class="p">(</span><span class="n">jira_role_json</span><span class="p">,</span> <span class="n">record_path</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;actors&#39;</span><span class="p">],</span> <span class="n">errors</span><span class="o">=</span><span class="s1">&#39;ignore&#39;</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="s1">&#39;_&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Jira Role Info. Role ID: </span><span class="si">{</span><span class="n">role_id</span><span class="si">}</span><span class="s2">; Project: </span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s2">; Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">role_info</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="n">jira_role_members_df</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">HTTPError</span> <span class="k">as</span> <span class="n">errh</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mf">17.1</span>
+            <span class="n">jira_role_members_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">dataframe</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error retrieving Jira Role Info. Role ID: </span><span class="si">{</span><span class="n">role_id</span><span class="si">}</span><span class="s2">; Project: </span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">errh</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">response</span><span class="o">.</span><span class="n">text</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">role_info</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="n">jira_role_members_df</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="n">status_code</span> <span class="o">=</span> <span class="o">-</span><span class="mi">17</span>
+            <span class="n">jira_role_members_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">dataframe</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status Code: </span><span class="si">{</span><span class="n">status_code</span><span class="si">}</span><span class="s2">; Error retrieving Jira Role Info. Role ID: </span><span class="si">{</span><span class="n">role_id</span><span class="si">}</span><span class="s2">; Project: </span><span class="si">{</span><span class="n">project_id</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">role_info</span><span class="p">(</span><span class="n">status_code</span><span class="p">,</span> <span class="n">jira_role_members_df</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.response_type_ref">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.response_type_ref">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">response_type_ref</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response_type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Used for processing Jira fields.</span>
+<span class="sd">        :param response_type: Input Jira field</span>
+<span class="sd">        :return: response_type_name</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">response_type_name</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;ts&#39;</span><span class="p">:</span> <span class="s1">&#39;Text Short&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;cs&#39;</span><span class="p">:</span> <span class="s1">&#39;Choice Selector&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;cd&#39;</span><span class="p">:</span> <span class="s1">&#39;Choice Dropdown&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;cl&#39;</span><span class="p">:</span> <span class="s1">&#39;Choice List&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;us&#39;</span><span class="p">:</span> <span class="s1">&#39;User&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;um&#39;</span><span class="p">:</span> <span class="s1">&#39;User Multiple&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;at&#39;</span><span class="p">:</span> <span class="s1">&#39;Attachment&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;dt&#39;</span><span class="p">:</span> <span class="s1">&#39;Date/Time&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;da&#39;</span><span class="p">:</span> <span class="s1">&#39;Date&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;ti&#39;</span><span class="p">:</span> <span class="s1">&#39;Time&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;tl&#39;</span><span class="p">:</span> <span class="s1">&#39;Title&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;cm&#39;</span><span class="p">:</span> <span class="s1">&#39;Choice Multiple&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;pg&#39;</span><span class="p">:</span> <span class="s1">&#39;Paragraph&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;rt&#39;</span><span class="p">:</span> <span class="s1">&#39;Rich-Text&#39;</span>
+        <span class="p">}</span>
+
+        <span class="k">return</span> <span class="n">response_type_name</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">response_type</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="JiraAPI.response_type_col_ref">
+<a class="viewcode-back" href="../index.html#jiraCore.JiraAPI.response_type_col_ref">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">response_type_col_ref</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">response_type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Gets the field type for responses.</span>
+<span class="sd">        :param response_type: String</span>
+<span class="sd">        :return: response_col_name</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">response_col_name</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;ts&#39;</span><span class="p">:</span> <span class="s1">&#39;textField&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;cs&#39;</span><span class="p">:</span> <span class="s1">&#39;choices_x&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;cd&#39;</span><span class="p">:</span> <span class="s1">&#39;choices_x&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;cl&#39;</span><span class="p">:</span> <span class="s1">&#39;choices_x&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;cm&#39;</span><span class="p">:</span> <span class="s1">&#39;choices_x&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;us&#39;</span><span class="p">:</span> <span class="s1">&#39;users&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;um&#39;</span><span class="p">:</span> <span class="s1">&#39;users&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;at&#39;</span><span class="p">:</span> <span class="s1">&#39;textField&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;dt&#39;</span><span class="p">:</span> <span class="s1">&#39;Date Time&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;da&#39;</span><span class="p">:</span> <span class="s1">&#39;date&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;ti&#39;</span><span class="p">:</span> <span class="s1">&#39;time&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;tl&#39;</span><span class="p">:</span> <span class="s1">&#39;textField&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;pg&#39;</span><span class="p">:</span> <span class="s1">&#39;textField&#39;</span>
+            <span class="p">,</span> <span class="s1">&#39;rt&#39;</span><span class="p">:</span> <span class="s1">&#39;textField&#39;</span>
+        <span class="p">}</span>
+
+        <span class="k">return</span> <span class="n">response_col_name</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">response_type</span><span class="p">)</span></div>
+</div>
+
+
+<div class="viewcode-block" id="get_file_application_type">
+<a class="viewcode-back" href="../index.html#jiraCore.get_file_application_type">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_file_application_type</span><span class="p">(</span><span class="n">file_attachment</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Gets file type for encoding.</span>
+<span class="sd">    :param file_attachment: Full path to file attachment.</span>
+<span class="sd">    :return: application_type (i.e., application/octet-stream, txt/plain&#39;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">file_extension</span> <span class="o">=</span> <span class="n">pathlib</span><span class="o">.</span><span class="n">Path</span><span class="p">(</span><span class="n">file_attachment</span><span class="p">)</span><span class="o">.</span><span class="n">suffix</span>
+    <span class="n">file_extension</span> <span class="o">=</span> <span class="n">file_extension</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s1">&#39;.&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">file_extension</span> <span class="ow">in</span> <span class="p">(</span><span class="s1">&#39;mmp&#39;</span><span class="p">):</span>
+        <span class="n">application_type</span> <span class="o">=</span> <span class="s1">&#39;application/octet-stream&#39;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">application_type</span> <span class="o">=</span> <span class="n">mimetypes</span><span class="o">.</span><span class="n">guess_type</span><span class="p">(</span><span class="n">file_attachment</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">application_type</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span> <span class="n">application_type</span> <span class="o">=</span> <span class="s1">&#39;txt/plain&#39;</span>
+    <span class="k">return</span> <span class="n">application_type</span></div>
+
+    <span class="c1"># Additional methods (e.g., attaching files, fetching changelogs, etc.) can be similarly refactored</span>
+
+<div class="viewcode-block" id="dict_as_key_value">
+<a class="viewcode-back" href="../index.html#jiraCore.dict_as_key_value">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">dict_as_key_value</span><span class="p">(</span><span class="n">input_dict</span><span class="p">,</span> <span class="n">key_as_variable</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">as_json</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Used to reformat a dictionary to a key-value pair. Useful for setting the variables dictionaries.</span>
+<span class="sd">    :param input_dict: Input dictionary containing name and id pairs.</span>
+<span class="sd">    :param key_as_variable: Default false. If true formats the key as a lowercase with underscores.</span>
+<span class="sd">    :param as_json: Default false. If true returns as formatted json.</span>
+<span class="sd">    :return: key_value</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">format_key</span><span class="p">(</span><span class="n">key</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Helper function to format the key as lowercase with underscores for spaces.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">key</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="s2">&quot;_&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">key_as_variable</span> <span class="k">else</span> <span class="n">key</span>
+
+    <span class="n">key_value_dict</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">format_key</span><span class="p">(</span><span class="n">val</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]):</span> <span class="nb">int</span><span class="p">(</span><span class="n">val</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">])</span> <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">val</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">isdigit</span><span class="p">()</span> <span class="k">else</span> <span class="n">val</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">input_dict</span>
+    <span class="p">}</span>
+
+    <span class="k">if</span> <span class="n">as_json</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+        <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">key_value_dict</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">key_value_dict</span></div>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">jira</span> <span class="o">=</span> <span class="n">JiraAPI</span><span class="p">()</span>
+    <span class="n">input_variable</span> <span class="o">=</span> <span class="s1">&#39;This is a test issue.&#39;</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="n">jira</span><span class="o">.</span><span class="n">issue_add_comment</span><span class="p">(</span><span class="n">issue_id</span><span class="o">=</span><span class="mi">10004</span><span class="p">,</span><span class="n">comment</span><span class="o">=</span><span class="s1">&#39;test comment&#39;</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">response</span><span class="p">)</span>
+    <span class="c1">#print(f&quot;id: {response.id}; key: {response.key}; info:{response.issue_info}; url: {response.issue_url}&quot;)</span>
+</pre></div>
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="../index.html">jiraCore</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+  <li><a href="index.html">Module code</a><ul>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2025, Ryan Forsythe.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.2.3</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+    </div>
+
+    
+
+    
+  </body>
+</html>
